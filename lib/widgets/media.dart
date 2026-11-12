@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../screens/routes.dart';
 import 'common.dart';
+import 'playlist_actions.dart';
 
 /// Kartu media horizontal (album, artis, playlist, podcast) untuk rak beranda.
 class MediaCard extends StatelessWidget {
@@ -145,6 +146,7 @@ void showTrackMenu(BuildContext context, Track t) {
                 if (context.mounted) toast(context, e.toString());
               }
             }),
+          item(Icons.playlist_add_rounded, s.addToPlaylist, () => addToPlaylist(context, t)),
           item(Icons.queue_music_rounded, s.addQueue, () {
             app.player.addToQueue(Playable.fromTrack(t));
             toast(context, s.addedQueue(t.title));

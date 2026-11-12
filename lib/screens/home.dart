@@ -19,6 +19,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       body: ApiView<HomeData>(
         path: '/v1/catalog/home',
+        query: {'city': ?(app.api.user?.city ?? app.settings.city)},
         parse: HomeData.fromJson,
         builder: (context, d, _) => CustomScrollView(slivers: [
           SliverToBoxAdapter(

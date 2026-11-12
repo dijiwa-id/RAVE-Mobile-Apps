@@ -7,8 +7,9 @@ List<T> _list<T>(dynamic v, T Function(Json) f) => (v as List? ?? const []).map(
 class Me {
   final String id, email, displayName;
   final String? avatarUrl, locale;
-  final bool premium;
-  const Me({required this.id, required this.email, required this.displayName, this.avatarUrl, this.locale, this.premium = false});
+  final bool premium, onboarded;
+  final String? city;
+  const Me({required this.id, required this.email, required this.displayName, this.avatarUrl, this.locale, this.premium = false, this.onboarded = true, this.city});
   factory Me.fromJson(Json j) => Me(
         id: j['id'],
         email: j['email'] ?? '',
@@ -16,8 +17,10 @@ class Me {
         avatarUrl: j['avatar_url'],
         locale: j['locale'],
         premium: j['premium'] == true,
+        onboarded: j['onboarded'] != false,
+        city: j['city'],
       );
-  Json toJson() => {'id': id, 'email': email, 'display_name': displayName, 'avatar_url': avatarUrl, 'locale': locale, 'premium': premium};
+  Json toJson() => {'id': id, 'email': email, 'display_name': displayName, 'avatar_url': avatarUrl, 'locale': locale, 'premium': premium, 'onboarded': onboarded, 'city': city};
 }
 
 class ArtistRef {
@@ -135,9 +138,9 @@ class Artist extends ArtistSummary {
 
 class PlaylistSummary {
   final String id, title;
-  final String? description, coverUrl, ownerName;
+  final String? description, coverUrl, ownerName, ownerId;
   final int trackCount;
-  const PlaylistSummary({required this.id, required this.title, this.description, this.coverUrl, this.ownerName, this.trackCount = 0});
+  const PlaylistSummary({required this.id, required this.title, this.description, this.coverUrl, this.ownerName, this.ownerId, this.trackCount = 0});
   factory PlaylistSummary.fromJson(Json j) {
     final o = j['owner'] as Json?;
     return PlaylistSummary(
@@ -146,6 +149,7 @@ class PlaylistSummary {
       description: j['description'],
       coverUrl: j['cover_url'],
       ownerName: o?['display_name'] ?? o?['name'],
+      ownerId: o?['id'],
       trackCount: (j['track_count'] as num?)?.toInt() ?? 0,
     );
   }
@@ -275,6 +279,8 @@ class AdCreative {
   final String? body, imageUrl, audioUrl, clickUrl, ctaLabel;
   final int durationS;
   final int? skippableAfterS;
+  /// Promosi internal RAVE → label "Dari RAVE", bukan "Iklan" (BRD §7.9 / ADS-04).
+  final bool isHouse;
   const AdCreative({
     required this.impressionId,
     required this.type,
@@ -287,6 +293,7 @@ class AdCreative {
     this.ctaLabel,
     required this.durationS,
     this.skippableAfterS,
+    this.isHouse = false,
   });
   factory AdCreative.fromJson(Json j) => AdCreative(
         impressionId: j['impression_id'],
@@ -300,5 +307,6 @@ class AdCreative {
         ctaLabel: j['cta_label'],
         durationS: (j['duration_s'] as num?)?.toInt() ?? 15,
         skippableAfterS: (j['skippable_after_s'] as num?)?.toInt(),
+        isHouse: j['is_house'] == true || j['label'] == 'Dari RAVE',
       );
 }

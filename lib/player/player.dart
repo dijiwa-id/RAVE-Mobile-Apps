@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
@@ -105,6 +106,12 @@ class Player extends ChangeNotifier {
   Stream<String> get messages => _messages.stream;
 
   Future<void> init() async {
+    for (final e in settings.pendingEvents) {
+      try {
+        _pending.add(jsonDecode(e) as Json);
+      } catch (_) {}
+    }
+    if (_pending.isNotEmpty) unawaited(flush());
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     _handler = await AudioService.init(
@@ -160,6 +167,7 @@ class Player extends ChangeNotifier {
       'played_ms': _playedMs,
       'at': DateTime.now().toUtc().toIso8601String(),
     });
+    unawaited(_persist());
     if (type != 'progress' || _pending.length >= 4) {
       unawaited(flush());
     } else {
@@ -182,7 +190,17 @@ class Player extends ChangeNotifier {
         _flushTimer?.cancel();
         _flushTimer = null;
       }
+      unawaited(_persist());
     }
+  }
+
+  /// Simpan antrean event ke perangkat (dipanggil setelah flush & saat aplikasi ke latar belakang).
+  Future<void> _persist() => settings.setPendingEvents(_pending.take(200).map(jsonEncode).toList());
+
+  /// Aplikasi ke latar belakang / ditutup: kirim & simpan event tertunda.
+  Future<void> onBackground() async {
+    await flush();
+    await _persist();
   }
 
   /// [resume] > 0: pemulihan item yang sama (stream kedaluwarsa/putus) — lanjut dari posisi terakhir.
@@ -205,9 +223,10 @@ class Player extends ChangeNotifier {
       final j = await api.post('/v1/playback/sessions', {item.kind == 'track' ? 'track_id' : 'episode_id': item.id, 'quality': settings.requestQuality}) as Json;
       if (current?.id != item.id) return;
       session = PlaybackSession.fromJson(j);
-      if (session!.qualityCapped == 'premium' && !_premiumNotified) {
+      final cap = session!.qualityCapped;
+      if (cap != null && cap != 'preview' && !_premiumNotified) {
         _premiumNotified = true;
-        _messages.add(_s.premiumQuality);
+        _messages.add(cap == 'premium' ? _s.premiumQuality : cap == 'disabled' ? _s.qualityDisabled : _s.qualityUnavailable);
       }
       await audio.setUrl(api.media(session!.streamUrl)!, initialPosition: resume);
       _publishItem();

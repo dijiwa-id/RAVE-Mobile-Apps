@@ -5,8 +5,9 @@ import '../core/settings.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'login.dart';
+import '../widgets/links.dart';
+import '../core/version.dart';
 
-const appVersion = '0.1.0';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -142,7 +143,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
               if (_test != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_test!, style: Rave.body(size: 13, color: _testOk ? Rave.mustard : Rave.berry))),
             ]),
-            _Section(s.about, children: [Text(s.version(appVersion), style: Rave.body(size: 13, color: Rave.muted))]),
+            if (u != null) const _Privacy(),
+            _Section(s.about, children: [
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                OutlineButton(label: s.privacyPolicy, onTap: () => openUrl('${app.settings.server}/privasi')),
+                OutlineButton(label: s.terms, onTap: () => openUrl('${app.settings.server}/ketentuan')),
+              ]),
+              const SizedBox(height: 12),Text(s.version(appVersionLabel), style: Rave.body(size: 13, color: Rave.muted))]),
           ]),
         );
       },
@@ -168,3 +175,102 @@ class _Section extends StatelessWidget {
         ]),
       );
 }
+
+/// Privasi & data (UU PDP, BRD §8.2 / IAM-07): persetujuan per tujuan (PUT /v1/me/consents) dan hapus akun (DELETE /v1/me).
+class _Privacy extends StatefulWidget {
+  const _Privacy();
+  @override
+  State<_Privacy> createState() => _PrivacyState();
+}
+
+class _PrivacyState extends State<_Privacy> {
+  static const purposes = ['personalization', 'ads', 'marketing', 'aggregate_sharing'];
+  Map<String, bool>? granted;
+
+  @override
+  void initState() {
+    super.initState();
+    App.read(context).api.get('/v1/me/consents').then((j) {
+      final m = {for (final p in purposes) p: false};
+      for (final c in (j['data'] as List? ?? const [])) {
+        m[c['purpose'] as String] = c['granted'] == true;
+      }
+      if (mounted) setState(() => granted = m);
+    }).catchError((_) {
+      if (mounted) setState(() => granted = {for (final p in purposes) p: false});
+    });
+  }
+
+  Future<void> _set(String p, bool v) async {
+    final app = App.read(context);
+    setState(() => granted![p] = v);
+    try {
+      await app.api.put('/v1/me/consents', {'purpose': p, 'granted': v});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => granted![p] = !v);
+      toast(context, e.toString());
+    }
+  }
+
+  Future<void> _delete() async {
+    final app = App.read(context);
+    final s = app.s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        backgroundColor: Rave.base,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: Rave.berry)),
+        title: Text(s.deleteTitle.toUpperCase(), style: Rave.poster(26)),
+        content: Text(s.deleteBody, style: Rave.body(color: Rave.muted)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(s.cancel, style: Rave.body(color: Rave.paper))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Rave.berry, shape: const RoundedRectangleBorder()),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(s.deleteConfirm.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await app.api.delete('/v1/me');
+      await app.player.reset();
+      await app.api.clear();
+      app.likes.reset();
+      app.cache.clear();
+      if (mounted) toast(context, s.deleted);
+    } catch (e) {
+      if (mounted) toast(context, e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = App.of(context).s;
+    final g = granted;
+    return _Section(s.privacy, hint: s.privacyHint, children: [
+      if (g == null)
+        const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator(color: Rave.mustard))
+      else
+        for (final p in purposes)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: g[p] ?? false,
+            activeThumbColor: Rave.mustard,
+            onChanged: (v) => _set(p, v),
+            title: Text(s.consentLabel(p), style: Rave.body(size: 14.5)),
+          ),
+      const SizedBox(height: 8),
+      TextButton.icon(
+        style: TextButton.styleFrom(padding: EdgeInsets.zero, foregroundColor: Rave.berry),
+        onPressed: _delete,
+        icon: const Icon(Icons.delete_forever_rounded),
+        label: Text(s.deleteAccount, style: Rave.body(weight: FontWeight.w700, color: const Color(0xFFE0566E))),
+      ),
+    ]);
+  }
+}
+

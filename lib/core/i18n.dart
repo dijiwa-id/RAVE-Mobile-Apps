@@ -45,6 +45,15 @@ class S {
   String get ob3Title => _('Dukung artismu', 'Back your artists');
   String get ob3Body => _('Setiap putaran tercatat untuk royalti artis. Ikuti, tonton live, dan beli tiket gig langsung dari RAVE.', 'Every play is counted toward artist royalties. Follow, watch live and buy gig tickets right in RAVE.');
   String get obNext => _('Lanjut', 'Next');
+  String get obStart => _('Mulai', 'Get started');
+  String get obCityTitle => _('Kamu dari kota mana?', 'Where are you based?');
+  String get obCityHint => _('Untuk gig, artis lokal & rekomendasi skena kotamu.', 'For gigs, local artists & your city scene.');
+  String get obGenreTitle => _('Genre favoritmu?', 'Your favourite genres?');
+  String obPicked(int n) => n == 0 ? _('Pilih satu atau lebih.', 'Pick one or more.') : _('$n dipilih', '$n selected');
+  String get obArtistTitle => _('Pilih 3 artis atau lebih', 'Pick 3 or more artists');
+  String obArtistsPicked(int n) => n >= 3 ? _('$n artis dipilih — mantap!', '$n artists picked — nice!') : _('$n/3 dipilih', '$n/3 picked');
+  String get obReadyTitle => _('Siap dengar!', 'Ready to listen!');
+  String obReadySummary(String c, int g, int a) => _('$c · $g genre · $a artis — berandamu sudah dipersonalisasi.', '$c · $g genres · $a artists — your home is personalised.');
   String get obSkip => _('Lewati', 'Skip');
   String get obGuest => _('Jelajahi dulu', 'Just browse');
   String get signup => _('Daftar gratis', 'Sign up free');
@@ -115,6 +124,57 @@ class S {
   String get queue => _('Antrean', 'Queue');
   String get lyrics => _('Lirik', 'Lyrics');
   String get nextUp => _('Berikutnya', 'Next up');
+  // Buat / playlist
+  String get create => _('Buat', 'Create');
+  String get createPlaylist => 'Playlist';
+  String get createPlaylistHint => _('Kumpulkan lagu favoritmu dalam satu playlist.', 'Gather your favourite songs in one playlist.');
+  String get namePlaylist => _('Beri nama playlist', 'Name your playlist');
+  String get myPlaylist => _('Playlist saya', 'My playlist');
+  String get cancel => _('Batal', 'Cancel');
+  String get addToPlaylist => _('Tambah ke playlist', 'Add to playlist');
+  String get newPlaylist => _('Playlist baru', 'New playlist');
+  String addedTo(String p) => _('Ditambahkan ke $p', 'Added to $p');
+  String playlistCreated(String p) => _('Playlist “$p” dibuat', 'Playlist “$p” created');
+  String get yourLibrary => _('Pustaka Kamu', 'Your Library');
+  // Premium
+  String get premiumHero1 => _('Musik tetap gratis.', 'Music stays free.');
+  String get premiumHero2 => _('Premium untuk sisanya.', 'Premium for the rest.');
+  String premiumLead(String price) => _('Kualitas Tinggi (AAC 320) & Lossless/Hi-Res (FLAC), podcast & fiksi eksklusif, tanpa iklan — mulai Rp $price per bulan.',
+      'High Quality (AAC 320) & Lossless/Hi-Res (FLAC), exclusive podcasts & fiction, no ads — from Rp $price a month.');
+  String get alreadyPremium => _('Kamu sudah pelanggan Premium', 'You are a Premium subscriber');
+  String get remindMe => _('Ingatkan saya saat dibuka', 'Remind me when it opens');
+  String get remindSaved => _('Siap! Kami kabari saat Premium dibuka.', 'Done! We will tell you when Premium opens.');
+  String premiumNote(int trial) => _('Dibuka bertahap setelah closed beta${trial > 0 ? ' · Gratis $trial hari untuk pelanggan pertama' : ''} · Batalkan kapan saja',
+      'Rolling out after closed beta${trial > 0 ? ' · $trial days free for early subscribers' : ''} · Cancel anytime');
+  String get plansTitle => _('Pilih paket', 'Pick a plan');
+  String get mostPopular => _('Paling populer', 'Most popular');
+  String get perMonth => _('/bulan', '/month');
+  String get planIndividual => _('Individu', 'Individual');
+  String get planIndividualWho => _('1 akun', '1 account');
+  String get planStudent => _('Pelajar', 'Student');
+  String get planStudentWho => _('1 akun terverifikasi kampus', '1 campus-verified account');
+  String get planDuo => 'Duo';
+  String get planDuoWho => _('2 akun dalam satu rumah', '2 accounts in one home');
+  String get allBenefits => _('Semua manfaat Premium', 'All Premium benefits');
+  String get hqLossless => 'AAC 320 & Lossless/Hi-Res (FLAC)';
+  String get offlineSoon => _('Unduhan offline — segera hadir', 'Offline downloads — coming soon');
+  String get studentVerify => _('Verifikasi pelajar & mahasiswa', 'Student verification');
+  String get twoAccounts => _('Dua akun Premium terpisah', 'Two separate Premium accounts');
+  String get freeVsPremium => _('Gratis vs Premium', 'Free vs Premium');
+  String get cmpOnDemand => _('Musik on-demand tanpa batas', 'Unlimited on-demand music');
+  String get cmpNormal => _('Kualitas Normal (AAC 160)', 'Normal quality (AAC 160)');
+  String get cmpHq => _('AAC 320 & Lossless (FLAC)', 'AAC 320 & Lossless (FLAC)');
+  String get cmpLyrics => _('Lirik sinkron & playlist', 'Synced lyrics & playlists');
+  String get cmpLive => _('Live streaming konser', 'Live concert streaming');
+  String get cmpPodcast => _('Podcast & fiksi premium', 'Premium podcasts & fiction');
+  String get cmpNoAds => _('Bebas iklan', 'Ad-free');
+  String get offlineSoonNote => _('Segera hadir: unduhan offline di aplikasi ponsel.', 'Coming soon: offline downloads in the mobile app.');
+  String get prev => _('Sebelumnya', 'Previous');
+  String get next => _('Berikutnya', 'Next');
+  String get repeat => _('Ulangi', 'Repeat');
+  String get position => _('Posisi lagu', 'Song position');
+  String get share => _('Bagikan', 'Share');
+  String get linkCopied => _('Tautan disalin', 'Link copied');
   String get noQueue => _('Antrean kosong.', 'Your queue is empty.');
   String get noLyrics => _('Lirik belum tersedia untuk lagu ini.', 'No lyrics for this song yet.');
   String get playingFrom => _('MEMUTAR DARI', 'PLAYING FROM');
@@ -123,6 +183,26 @@ class S {
   String get premiumEpisode => _('Episode ini khusus Premium.', 'This episode is Premium only.');
   String get streamLost => _('Stream terputus. Ketuk untuk mencoba lagi.', 'Stream interrupted. Tap to retry.');
   String get ad => _('Iklan', 'Ad');
+  String get houseAd => 'Dari RAVE';
+  String get open => _('Buka', 'Open');
+  String get qualityDisabled => _('Kualitas tinggi sedang dinonaktifkan — diputar dengan kualitas standar.', 'High quality is currently disabled — playing in standard quality.');
+  String get qualityUnavailable => _('Kualitas yang dipilih belum tersedia untuk lagu ini.', 'The selected quality is not available for this song yet.');
+  // Privasi (UU PDP)
+  String get privacy => _('Privasi & data', 'Privacy & data');
+  String get privacyHint => _('Atur bagaimana RAVE memakai datamu. Bisa diubah kapan saja.', 'Control how RAVE uses your data. Change it anytime.');
+  String consentLabel(String p) => switch (p) {
+        'marketing' => _('Kabar & promo RAVE', 'RAVE news & promos'),
+        'personalization' => _('Rekomendasi yang dipersonalisasi', 'Personalised recommendations'),
+        'ads' => _('Iklan yang relevan', 'Relevant ads'),
+        _ => _('Berbagi data agregat anonim dengan artis', 'Share anonymous aggregate data with artists'),
+      };
+  String get privacyPolicy => _('Kebijakan Privasi', 'Privacy Policy');
+  String get terms => _('Ketentuan Layanan', 'Terms of Service');
+  String get deleteAccount => _('Hapus akun', 'Delete account');
+  String get deleteTitle => _('Hapus akun RAVE?', 'Delete your RAVE account?');
+  String get deleteBody => _('Akun, pustaka, playlist, dan riwayat dengarmu akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.', 'Your account, library, playlists and listening history will be permanently deleted. This cannot be undone.');
+  String get deleteConfirm => _('Ya, hapus permanen', 'Yes, delete permanently');
+  String get deleted => _('Akun dihapus.', 'Account deleted.');
   String get skip => _('Lewati', 'Skip');
   String skipIn(int s) => _('Lewati dalam $s', 'Skip in $s');
   String get adWhy => _('Iklan membantu artis tetap dibayar. Premium bebas iklan.', 'Ads keep artists paid. Premium is ad-free.');

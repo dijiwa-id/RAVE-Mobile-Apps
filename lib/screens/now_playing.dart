@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../player/player.dart';
 import '../widgets/common.dart';
+import '../widgets/deck.dart';
 import 'shell.dart';
 
 void openNowPlaying(BuildContext context) {
@@ -96,44 +99,48 @@ class NowPlayingScreen extends StatelessWidget {
                       const _Progress(),
                       if (p.error != null)
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.only(top: 2),
                           child: Text(p.error!, textAlign: TextAlign.center, style: Rave.body(size: 12.5, color: Rave.mustard)),
                         ),
-                      const SizedBox(height: 6),
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        IconButton(
-                          tooltip: s.shuffle,
-                          onPressed: p.toggleShuffle,
-                          icon: Icon(Icons.shuffle_rounded, color: p.shuffle ? Rave.mustard : Rave.paper),
-                        ),
-                        IconButton(iconSize: 40, onPressed: p.prev, icon: const Icon(Icons.skip_previous_rounded)),
-                        PlayButton(
-                          size: 72,
-                          playing: p.playing,
-                          semantic: p.playing ? s.pause : s.play,
-                          onTap: p.error != null ? p.retry : p.toggle,
-                        ),
-                        IconButton(iconSize: 40, onPressed: p.next, icon: const Icon(Icons.skip_next_rounded)),
-                        IconButton(
-                          onPressed: p.cycleRepeat,
-                          icon: Icon(p.repeat == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: p.repeat == LoopMode.off ? Rave.paper : Rave.mustard),
-                        ),
-                      ]),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
+                      Center(
+                        child: LayoutBuilder(builder: (context, box) {
+                          // Lebar tombol menyesuaikan layar (5 tombol + celah + padding baki).
+                          final k = ((box.maxWidth - 12 - 4 * 6) / 5.6).clamp(44.0, 66.0);
+                          return DeckTray(children: [
+                            DeckKey(semantic: s.shuffle, toggle: true, active: p.shuffle, locked: p.ad != null, width: k * 0.85, height: k * 0.78, onTap: p.toggleShuffle, child: const Icon(Icons.shuffle_rounded)),
+                            DeckKey(semantic: s.prev, locked: p.ad != null, width: k, height: k * 0.92, onTap: p.prev, child: const Icon(Icons.skip_previous_rounded)),
+                            DeckKey(
+                              semantic: p.playing ? s.pause : s.play,
+                              play: true,
+                              width: k * 1.35,
+                              height: k * 0.92,
+                              onTap: p.error != null ? p.retry : p.toggle,
+                              child: p.buffering && p.error == null
+                                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Rave.ink))
+                                  : Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                            ),
+                            DeckKey(semantic: s.next, locked: p.ad != null, width: k, height: k * 0.92, onTap: p.next, child: const Icon(Icons.skip_next_rounded)),
+                            DeckKey(
+                              semantic: s.repeat,
+                              toggle: true,
+                              active: p.repeat != LoopMode.off,
+                              locked: p.ad != null,
+                              width: k * 0.85,
+                              height: k * 0.78,
+                              onTap: p.cycleRepeat,
+                              child: Icon(p.repeat == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded),
+                            ),
+                          ]);
+                        }),
+                      ),
+                      const SizedBox(height: 14),
                       Row(children: [
-                        if (p.session != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(border: Border.all(color: Rave.line)),
-                            child: Text(p.session!.codecLabel, style: Rave.label(size: 9, color: Rave.muted)),
-                          ),
+                        _Chip(icon: Icons.queue_music_rounded, label: s.queue, onTap: () => _sheet(context, const _QueueSheet())),
+                        const SizedBox(width: 10),
+                        if (c.kind == 'track') _Chip(icon: Icons.lyrics_outlined, label: s.lyrics, onTap: () => _sheet(context, const _LyricsSheet())),
                         const Spacer(),
-                        if (c.kind == 'track')
-                          TextButton.icon(
-                            onPressed: () => _sheet(context, const _LyricsSheet()),
-                            icon: const Icon(Icons.lyrics_outlined, color: Rave.paper, size: 18),
-                            label: Text(s.lyrics.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)),
-                          ),
+                        IconButton(tooltip: s.share, onPressed: () => _share(context, c), icon: const Icon(Icons.ios_share_rounded, size: 22)),
                       ]),
                       const SizedBox(height: 8),
                     ]),
@@ -148,6 +155,14 @@ class NowPlayingScreen extends StatelessWidget {
   }
 
   void _openInTab(BuildContext context, String kind, String id) => openInActiveTab(kind, id);
+
+  /// Bagikan: salin tautan web lagu ke papan klip (tanpa paket share tambahan).
+  void _share(BuildContext context, Playable c) {
+    final app = App.read(context);
+    final url = '${app.settings.server}/app/${c.kind == 'track' ? (c.releaseId != null ? 'album/${c.releaseId}' : 'track/${c.id}') : 'episode/${c.id}'}';
+    Clipboard.setData(ClipboardData(text: '${c.title} — ${c.subtitle}\n$url'));
+    toast(context, app.s.linkCopied);
+  }
 
   void _sheet(BuildContext context, Widget child) => showModalBottomSheet<void>(
         context: context,
@@ -173,22 +188,26 @@ class _ProgressState extends State<_Progress> {
       stream: p.position,
       builder: (_, snap) {
         final dur = p.duration.inMilliseconds.toDouble();
-        final pos = drag ?? (snap.data?.inMilliseconds.toDouble() ?? 0).clamp(0, dur == 0 ? 1 : dur).toDouble();
+        final pos = drag ?? (snap.data?.inMilliseconds.toDouble() ?? 0);
+        final ad = p.ad;
+        final status = ad != null ? 'AD' : p.buffering && p.error == null ? 'BUFFER' : p.playing ? 'PLAY' : p.current != null ? 'PAUSE' : 'STOP';
         return Column(children: [
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(trackHeight: 3, overlayShape: SliderComponentShape.noOverlay),
-            child: Slider(
-              min: 0,
-              max: dur == 0 ? 1 : dur,
-              value: pos.clamp(0, dur == 0 ? 1 : dur),
-              onChanged: (v) => setState(() => drag = v),
-              onChangeEnd: (v) {
-                p.seek(Duration(milliseconds: v.round()));
-                setState(() => drag = null);
-              },
-            ),
+          DeckLcd(
+            status: status,
+            codec: ad != null ? null : p.session?.codecLabel,
+            time: fmtDuration(ad != null ? ad.elapsed.inMilliseconds : pos.round()),
+            on: p.playing && !p.buffering,
+            dim: p.current == null,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
+          DeckSlider(
+            semantic: App.of(context).s.position,
+            value: pos,
+            max: dur,
+            locked: ad != null,
+            onDrag: (v) => setState(() => drag = v),
+            onChanged: (v) => p.seek(Duration(milliseconds: v.round())),
+          ),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(fmtDuration(pos.round()), style: Rave.label(size: 10, color: Rave.muted)),
             Text(fmtDuration(dur.round()), style: Rave.label(size: 10, color: Rave.muted)),
@@ -197,6 +216,29 @@ class _ProgressState extends State<_Progress> {
       },
     );
   }
+}
+
+/// Tombol pil sekunder (Antrean / Lirik) — sama dengan web.
+class _Chip extends StatelessWidget {
+  const _Chip({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white.withValues(alpha: 0.10),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: Rave.paper),
+              const SizedBox(width: 8),
+              Text(label.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)),
+            ]),
+          ),
+        ),
+      );
 }
 
 class _QueueSheet extends StatelessWidget {

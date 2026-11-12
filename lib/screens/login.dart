@@ -83,6 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (loc != null) await app.settings.setLocale(loc);
       app.cache.clear();
       app.likes.reset();
+      await syncOnboarding(app);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       setState(() => _err = e is OfflineError ? app.s.offline : e.toString());

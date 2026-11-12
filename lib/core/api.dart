@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'version.dart';
 import 'settings.dart';
 
 /// Galat RFC 9457 dari gateway RAVE.
@@ -25,7 +26,11 @@ class OfflineError implements Exception {
 
 /// Sesi & klien HTTP. Token disimpan di Keystore Android (flutter_secure_storage), bukan prefs biasa.
 class Api extends ChangeNotifier {
-  Api(this.settings);
+  Api(this.settings) {
+    settings.onLocaleChanged = (l) {
+      if (authed) request<dynamic>('/v1/me', method: 'PATCH', body: {'locale': l}).catchError((_) => null);
+    };
+  }
   final Settings settings;
   final _store = const FlutterSecureStorage(aOptions: AndroidOptions());
   final _client = http.Client();
@@ -103,7 +108,7 @@ class Api extends ChangeNotifier {
   Future<T> request<T>(String path, {String method = 'GET', Object? body, Map<String, String>? query, bool auth = true, Duration timeout = const Duration(seconds: 20)}) async {
     final uri = Uri.parse('$base$path').replace(queryParameters: query == null || query.isEmpty ? null : query);
     Future<http.Response> go() {
-      final h = <String, String>{'accept-language': settings.locale};
+      final h = <String, String>{'accept-language': settings.locale, 'x-app-version': 'android/$appVersion+$appBuild'};
       if (body != null) h['content-type'] = 'application/json';
       if (auth && _access != null) h['authorization'] = 'Bearer $_access';
       final req = http.Request(method, uri)..headers.addAll(h);

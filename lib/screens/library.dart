@@ -5,6 +5,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'login.dart';
+import '../widgets/playlist_actions.dart';
 import 'routes.dart';
 
 /// Pustaka: chip filter (Playlist/Artis/Album) + daftar ala aplikasi musik.
@@ -30,7 +31,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             child: Row(children: [
               Cover(app.api.user?.avatarUrl, size: 34, round: true),
               const SizedBox(width: 12),
-              Expanded(child: Text(s.library.toUpperCase(), style: Rave.poster(36))),
+              Expanded(child: Text(s.yourLibrary.toUpperCase(), style: Rave.poster(34))),
+              IconButton(tooltip: s.createPlaylist, onPressed: () => showCreateSheet(context), icon: const Icon(Icons.add_rounded, size: 28)),
               IconButton(tooltip: s.settings, onPressed: () => openItem(context, 'settings', ''), icon: const Icon(Icons.settings_outlined)),
             ]),
           ),

@@ -98,6 +98,20 @@ class Likes extends ChangeNotifier {
   }
 }
 
+/// Akun baru/belum onboarding + pilihan tamu lengkap → kirim ke /v1/me/onboarding (ikuti artis, kota, genre).
+Future<void> syncOnboarding(AppState app) async {
+  final u = app.api.user;
+  final st = app.settings;
+  if (u == null || u.onboarded || st.city == null || st.artistIds.length < 3) return;
+  try {
+    final me = await app.api.post('/v1/me/onboarding', {'city': st.city, 'genres': st.genres, 'artist_ids': st.artistIds}) as Json;
+    await app.api.setUser(Me.fromJson(me));
+    app.cache.invalidate('/v1/');
+  } catch (_) {
+    // best-effort: dapat diulang dari Pengaturan nanti
+  }
+}
+
 /// Muat item yang bisa diputar dari sebuah kartu (album/artis/playlist/episode).
 Future<List<Playable>> playablesOf(AppState app, String kind, String id) async {
   final api = app.api;

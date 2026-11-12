@@ -5,6 +5,8 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../screens/now_playing.dart';
 import 'common.dart';
+import 'deck.dart';
+import 'links.dart';
 
 /// Mini-player di atas tab bar: sampul, judul, suka, putar/jeda, progres tipis. Ketuk → pemutar layar penuh,
 /// geser ke atas juga membuka. Selama jeda iklan menampilkan kartu iklan.
@@ -47,16 +49,18 @@ class MiniPlayer extends StatelessWidget {
                       onPressed: () => app.likes.toggle(c.id, app.cache).catchError((_) {}),
                       icon: Icon(app.likes.has(c.id) ? Icons.favorite : Icons.favorite_border, color: app.likes.has(c.id) ? Rave.mustard : Rave.paper),
                     ),
-                  SizedBox(
-                    width: 44,
+                  const SizedBox(width: 4),
+                  DeckKey(
+                    semantic: p.playing ? s.pause : s.play,
+                    play: true,
+                    width: 48,
+                    height: 40,
+                    onTap: p.error != null ? p.retry : p.toggle,
                     child: p.buffering && p.error == null
-                        ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Rave.paper)))
-                        : IconButton(
-                            tooltip: p.playing ? s.pause : s.play,
-                            onPressed: p.error != null ? p.retry : p.toggle,
-                            icon: Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 30),
-                          ),
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Rave.ink))
+                        : Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                   ),
+                  const SizedBox(width: 2),
                 ]),
               ),
               StreamBuilder<Duration>(
@@ -64,7 +68,7 @@ class MiniPlayer extends StatelessWidget {
                 builder: (_, snap) {
                   final d = p.duration.inMilliseconds;
                   final v = d == 0 ? 0.0 : ((snap.data?.inMilliseconds ?? 0) / d).clamp(0.0, 1.0);
-                  return LinearProgressIndicator(value: v, minHeight: 2, color: Rave.paper, backgroundColor: Rave.line);
+                  return LinearProgressIndicator(value: v, minHeight: 3, color: Rave.mustard, backgroundColor: const Color(0xFF0A090C));
                 },
               ),
             ]),
@@ -94,10 +98,19 @@ class _AdMini extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Eyebrow('${s.ad} · ${a.advertiser} · ${left}s', color: Rave.mustard, size: 9.5),
+            Eyebrow('${a.isHouse ? s.houseAd : s.ad} · ${a.advertiser} · ${left}s', color: Rave.mustard, size: 9.5),
             Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(weight: FontWeight.w700)),
           ]),
         ),
+        if (a.clickUrl != null)
+          IconButton(
+            tooltip: a.ctaLabel ?? s.open,
+            onPressed: () {
+              app.player.adClicked();
+              openUrl(a.clickUrl!);
+            },
+            icon: const Icon(Icons.open_in_new_rounded, size: 20),
+          ),
         if (skipIn >= 0)
           OutlineButton(label: skipIn > 0 ? s.skipIn(skipIn) : s.skip, onTap: skipIn > 0 ? null : app.player.skipAd),
       ]),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/app_state.dart';
+import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'login.dart';
@@ -165,7 +166,9 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
 
 // =================================================================== ONBOARDING
 
-/// Onboarding 3 halaman bergaya poster gig. Halaman terakhir: Daftar / Masuk / Lanjut sebagai tamu.
+/// Onboarding personalisasi (sama dengan web /onboarding & endpoint /v1/me/onboarding):
+/// Selamat datang → kota → genre → min. 3 artis → siap (Daftar / Masuk / Jelajahi dulu).
+/// Pilihan tamu disimpan di perangkat dan dikirim saat ia mendaftar/masuk.
 class Onboarding extends StatefulWidget {
   const Onboarding({super.key, required this.onDone});
   final VoidCallback onDone;
@@ -173,14 +176,24 @@ class Onboarding extends StatefulWidget {
   State<Onboarding> createState() => _OnboardingState();
 }
 
+const _cities = ['Jakarta', 'Bandung', 'Yogyakarta', 'Surabaya', 'Malang', 'Bali', 'Medan', 'Semarang', 'Makassar', 'Solo', 'Palembang', 'Lainnya'];
+const _fallbackGenres = ['indie-pop', 'folk', 'akustik', 'rock', 'post-punk', 'indie-rock', 'r-n-b', 'soul', 'shoegaze', 'dream-pop', 'hip-hop', 'pop', 'electronic', 'jazz', 'dangdut'];
+
 class _OnboardingState extends State<Onboarding> {
   final _pc = PageController();
-  double page = 0;
+  int step = 0;
+  String? city;
+  final genres = <String>{};
+  final artists = <String>{};
+  static const steps = 5;
 
   @override
   void initState() {
     super.initState();
-    _pc.addListener(() => setState(() => page = _pc.page ?? 0));
+    final st = App.read(context).settings;
+    city = st.city;
+    genres.addAll(st.genres);
+    artists.addAll(st.artistIds);
   }
 
   @override
@@ -189,111 +202,332 @@ class _OnboardingState extends State<Onboarding> {
     super.dispose();
   }
 
-  Future<void> _auth(bool signup) async {
-    final ok = await openLogin(context, signup: signup);
-    if (ok) widget.onDone();
+  void _go(int i) {
+    HapticFeedback.selectionClick();
+    setState(() => step = i);
+    _pc.animateToPage(i, duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
   }
+
+  Future<void> _save() => App.read(context).settings.setPersonalization(city, genres.toList(), artists.toList());
+
+  Future<void> _finish({String? auth}) async {
+    await _save();
+    if (!mounted) return;
+    if (auth != null) {
+      final ok = await openLogin(context, signup: auth == 'signup');
+      if (!ok) return;
+    }
+    widget.onDone();
+  }
+
+  bool get _canNext => switch (step) { 1 => city != null, 2 => genres.isNotEmpty, 3 => artists.length >= 3, _ => true };
 
   @override
   Widget build(BuildContext context) {
     final app = App.of(context);
     final s = app.s;
-    final pages = [
-      (tint: Rave.purple, eyebrow: '01 / 03', title: s.ob1Title, body: s.ob1Body, art: const _ArtCovers()),
-      (tint: Rave.teal, eyebrow: '02 / 03', title: s.ob2Title, body: s.ob2Body, art: const _ArtLyrics()),
-      (tint: Rave.berry, eyebrow: '03 / 03', title: s.ob3Title, body: s.ob3Body, art: const _ArtLive()),
-    ];
-    final i = page.round().clamp(0, 2);
-    final last = page > 1.5;
-    final bg = Color.lerp(pages[page.floor().clamp(0, 2)].tint, pages[page.ceil().clamp(0, 2)].tint, page - page.floor())!;
+    const tints = [Rave.purple, Rave.teal, Rave.plum, Rave.berry, Rave.purple];
     return Scaffold(
       backgroundColor: Rave.canvas,
       body: Stack(fit: StackFit.expand, children: [
-        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [bg, Rave.canvas], stops: const [0, 0.78]))),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [tints[step], Rave.canvas], stops: const [0, 0.7])),
+        ),
         SafeArea(
           child: Column(children: [
+            // Kepala: kembali · progres bersegmen · bahasa · lewati
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+              padding: const EdgeInsets.fromLTRB(4, 6, 8, 0),
               child: Row(children: [
-                Image.asset('assets/brand/rave-logo.webp', height: 26),
-                const Spacer(),
+                SizedBox(
+                  width: 44,
+                  child: step > 0 ? IconButton(tooltip: MaterialLocalizations.of(context).backButtonTooltip, onPressed: () => _go(step - 1), icon: const Icon(Icons.arrow_back_rounded)) : null,
+                ),
+                Expanded(
+                  child: Row(children: [
+                    for (var k = 0; k < steps; k++)
+                      Expanded(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: 4,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          color: k <= step ? Rave.mustard : Rave.paper.withValues(alpha: 0.2),
+                        ),
+                      ),
+                  ]),
+                ),
                 for (final l in ['id', 'en'])
-                  TextButton(
-                    onPressed: () => app.settings.setLocale(l),
-                    child: Text(l.toUpperCase(), style: Rave.label(size: 11, color: app.settings.locale == l ? Rave.mustard : Rave.paper.withValues(alpha: 0.6))),
+                  GestureDetector(
+                    onTap: () => app.settings.setLocale(l),
+                    child: Padding(padding: const EdgeInsets.all(8), child: Text(l.toUpperCase(), style: Rave.label(size: 11, color: app.settings.locale == l ? Rave.mustard : Rave.paper.withValues(alpha: 0.5)))),
                   ),
-                if (!last) TextButton(onPressed: () => _pc.animateToPage(2, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic), child: Text(s.obSkip.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper))),
+                if (step > 0 && step < steps - 1)
+                  TextButton(onPressed: () => _go(steps - 1), child: Text(s.obSkip.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper))),
               ]),
             ),
             Expanded(
-              child: PageView.builder(
+              child: PageView(
                 controller: _pc,
-                itemCount: pages.length,
-                itemBuilder: (_, k) {
-                  final d = (page - k).clamp(-1.0, 1.0);
-                  final pg = pages[k];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(
-                        child: Center(
-                          // Paralaks: ilustrasi bergeser lebih lambat dari teks.
-                          child: Transform.translate(offset: Offset(d * -60, 0), child: Opacity(opacity: (1 - d.abs()).clamp(0.0, 1.0), child: pg.art)),
-                        ),
-                      ),
-                      Eyebrow(pg.eyebrow, color: Rave.mustard),
-                      const SizedBox(height: 10),
-                      Transform.translate(
-                        offset: Offset(d * 40, 0),
-                        child: Text(pg.title.toUpperCase(), style: Rave.poster(MediaQuery.sizeOf(context).width > 400 ? 50 : 42)),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(pg.body, style: Rave.body(size: 15.5, color: Rave.paper.withValues(alpha: 0.85), height: 1.45)),
-                      const SizedBox(height: 20),
-                    ]),
-                  );
-                },
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _Welcome(onLogin: () => _finish(auth: 'login')),
+                  _Question(
+                    eyebrow: '01 / 03',
+                    title: s.obCityTitle,
+                    hint: s.obCityHint,
+                    child: _Chips(options: _cities, selected: {?city}, onTap: (c) => setState(() => city = c)),
+                  ),
+                  _Question(
+                    eyebrow: '02 / 03',
+                    title: s.obGenreTitle,
+                    hint: s.obPicked(genres.length),
+                    child: _GenreChips(selected: genres, onTap: (g) => setState(() => genres.contains(g) ? genres.remove(g) : genres.add(g))),
+                  ),
+                  _Question(
+                    eyebrow: '03 / 03',
+                    title: s.obArtistTitle,
+                    hint: s.obArtistsPicked(artists.length),
+                    child: _ArtistPicker(selected: artists, genres: genres, onTap: (id) => setState(() => artists.contains(id) ? artists.remove(id) : artists.add(id))),
+                  ),
+                  _Ready(city: city, genres: genres.length, artists: artists.length),
+                ],
               ),
             ),
-            // Indikator halaman: bilah mustard.
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(children: [
-                for (var k = 0; k < 3; k++)
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    margin: const EdgeInsets.only(right: 6),
-                    height: 5,
-                    width: k == i ? 34 : 12,
-                    color: k == i ? Rave.mustard : Rave.paper.withValues(alpha: 0.3),
-                  ),
-              ]),
-            ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 260),
-                child: last
+                child: step == steps - 1
                     ? Column(key: const ValueKey('cta'), children: [
-                        PrimaryButton(label: s.signup, onTap: () => _auth(true)),
+                        PrimaryButton(label: s.signup, onTap: () => _finish(auth: 'signup')),
                         const SizedBox(height: 10),
                         Row(children: [
-                          Expanded(child: _Ghost(label: s.signIn, onTap: () => _auth(false))),
+                          Expanded(child: _Ghost(label: s.signIn, onTap: () => _finish(auth: 'login'))),
                           const SizedBox(width: 10),
-                          Expanded(child: _Ghost(label: s.obGuest, onTap: widget.onDone)),
+                          Expanded(child: _Ghost(label: s.obGuest, onTap: _finish)),
                         ]),
                       ])
                     : SizedBox(
-                        key: const ValueKey('next'),
+                        key: ValueKey('next$step'),
                         width: double.infinity,
-                        child: PrimaryButton(label: s.obNext, onTap: () => _pc.nextPage(duration: const Duration(milliseconds: 450), curve: Curves.easeOutCubic)),
+                        child: PrimaryButton(label: step == 0 ? s.obStart : s.obNext, onTap: _canNext ? () => _go(step + 1) : null),
                       ),
               ),
             ),
           ]),
         ),
         const IgnorePointer(child: Grain()),
+      ]),
+    );
+  }
+}
+
+/// Langkah 0: poster sambutan dengan sampul yang berjatuhan masuk.
+class _Welcome extends StatelessWidget {
+  const _Welcome({required this.onLogin});
+  final VoidCallback onLogin;
+  @override
+  Widget build(BuildContext context) {
+    final s = App.of(context).s;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 8),
+        Image.asset('assets/brand/rave-logo.webp', height: 30),
+        const Expanded(child: Center(child: _ArtCovers())),
+        Text(s.ob1Title.toUpperCase(), style: Rave.poster(MediaQuery.sizeOf(context).width > 400 ? 50 : 42)),
+        const SizedBox(height: 10),
+        Text(s.ob1Body, style: Rave.body(size: 15.5, color: Rave.paper.withValues(alpha: 0.85), height: 1.45)),
+        TextButton(
+          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+          onPressed: onLogin,
+          child: Text(s.haveAccount, style: Rave.body(weight: FontWeight.w700, color: Rave.mustard)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Question extends StatelessWidget {
+  const _Question({required this.eyebrow, required this.title, required this.hint, required this.child});
+  final String eyebrow, title, hint;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Eyebrow(eyebrow, color: Rave.mustard),
+          const SizedBox(height: 8),
+          Text(title.toUpperCase(), style: Rave.poster(38)),
+          const SizedBox(height: 6),
+          AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Text(hint, key: ValueKey(hint), style: Rave.body(size: 14, color: Rave.muted))),
+          const SizedBox(height: 16),
+          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.only(bottom: 12), child: child)),
+        ]),
+      );
+}
+
+/// Chip pilihan bergaya stiker: memantul & miring saat dipilih.
+class _Chips extends StatelessWidget {
+  const _Chips({required this.options, required this.selected, required this.onTap, this.labels});
+  final List<String> options;
+  final Set<String> selected;
+  final void Function(String) onTap;
+  final Map<String, String>? labels;
+  @override
+  Widget build(BuildContext context) => Wrap(spacing: 10, runSpacing: 10, children: [
+        for (var i = 0; i < options.length; i++)
+          Builder(builder: (_) {
+            final o = options[i];
+            final on = selected.contains(o);
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onTap(o);
+              },
+              child: AnimatedScale(
+                scale: on ? 1.06 : 1,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutBack,
+                child: AnimatedRotation(
+                  turns: on ? (i.isEven ? -0.008 : 0.008) : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: on ? Rave.mustard : Colors.white.withValues(alpha: 0.08),
+                      border: Border.all(color: on ? Rave.ink : Rave.paper.withValues(alpha: 0.25), width: on ? 2 : 1),
+                      boxShadow: on ? Rave.hardShadow : null,
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (on) ...[const Icon(Icons.check_rounded, size: 16, color: Rave.ink), const SizedBox(width: 4)],
+                      Text((labels?[o] ?? o).toUpperCase(), style: Rave.label(size: 11.5, color: on ? Rave.ink : Rave.paper)),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }),
+      ]);
+}
+
+/// Genre dari katalog (/v1/catalog/genres), cadangan daftar tetap bila offline.
+class _GenreChips extends StatelessWidget {
+  const _GenreChips({required this.selected, required this.onTap});
+  final Set<String> selected;
+  final void Function(String) onTap;
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Json>(
+        future: App.read(context).cache.load('/v1/catalog/genres', () async => await App.read(context).api.get('/v1/catalog/genres')).then((v) => v as Json),
+        builder: (_, snap) {
+          final list = (snap.data?['data'] as List?)?.cast<Json>();
+          final ids = list != null && list.isNotEmpty ? list.map((g) => g['id'] as String).toList() : _fallbackGenres;
+          final labels = {for (final g in list ?? const <Json>[]) g['id'] as String: (g['name'] ?? g['id']) as String};
+          return _Chips(options: ids, selected: selected, onTap: onTap, labels: labels);
+        },
+      );
+}
+
+/// Kisi artis bulat; artis bergenre pilihan diurutkan lebih dulu. Tanda centang mustard saat dipilih.
+class _ArtistPicker extends StatelessWidget {
+  const _ArtistPicker({required this.selected, required this.genres, required this.onTap});
+  final Set<String> selected, genres;
+  final void Function(String) onTap;
+  @override
+  Widget build(BuildContext context) {
+    final app = App.read(context);
+    return FutureBuilder<Object>(
+      future: app.cache.load('/v1/catalog/artists?limit=50', () async => await app.api.get('/v1/catalog/artists', query: {'limit': '50'})),
+      builder: (_, snap) {
+        if (snap.hasError) return ErrorState(message: app.s.offline, retry: () => (context as Element).markNeedsBuild());
+        final data = ((snap.data as Json?)?['data'] as List?)?.map((a) => ArtistSummary.fromJson(a as Json)).toList();
+        if (data == null) return const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Rave.mustard)));
+        data.sort((a, b) => (b.genres.any(genres.contains) ? 1 : 0) - (a.genres.any(genres.contains) ? 1 : 0));
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 120, mainAxisExtent: 142, crossAxisSpacing: 10, mainAxisSpacing: 6),
+          itemCount: data.length,
+          itemBuilder: (_, i) {
+            final a = data[i];
+            final on = selected.contains(a.id);
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onTap(a.id);
+              },
+              child: Column(children: [
+                AnimatedScale(
+                  scale: on ? 0.92 : 1,
+                  duration: const Duration(milliseconds: 160),
+                  child: Stack(clipBehavior: Clip.none, children: [
+                    Container(
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: on ? Rave.mustard : Colors.transparent, width: 3)),
+                      child: Cover(a.imageUrl, size: 92, round: true),
+                    ),
+                    if (on)
+                      Positioned(
+                        right: -2,
+                        bottom: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(color: Rave.mustard, shape: BoxShape.circle, border: Border.all(color: Rave.ink, width: 2)),
+                          child: const Icon(Icons.check_rounded, size: 16, color: Rave.ink),
+                        ),
+                      ),
+                  ]),
+                ),
+                const SizedBox(height: 6),
+                Text(a.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: Rave.body(size: 12.5, weight: FontWeight.w700, color: on ? Rave.mustard : Rave.paper)),
+              ]),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Langkah terakhir: ringkasan pilihan + fitur unggulan (lirik, latar belakang, dukung artis).
+class _Ready extends StatelessWidget {
+  const _Ready({required this.city, required this.genres, required this.artists});
+  final String? city;
+  final int genres, artists;
+  @override
+  Widget build(BuildContext context) {
+    final s = App.of(context).s;
+    Widget feat(IconData i, String t, String b) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: Rave.hardShadow),
+              child: Icon(i, color: Rave.ink, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(t, style: Rave.body(size: 15, weight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(b, style: Rave.body(size: 13, color: Rave.muted, height: 1.35)),
+              ]),
+            ),
+          ]),
+        );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Center(child: SizedBox(height: 210, child: _ArtLive())),
+        const SizedBox(height: 10),
+        Text(s.obReadyTitle.toUpperCase(), style: Rave.poster(42)),
+        const SizedBox(height: 6),
+        if (artists >= 3) Text(s.obReadySummary(city ?? '-', genres, artists), style: Rave.body(size: 14, color: Rave.mustard)),
+        const SizedBox(height: 18),
+        feat(Icons.lyrics_outlined, s.ob2Title, s.ob2Body),
+        feat(Icons.favorite_rounded, s.ob3Title, s.ob3Body),
       ]),
     );
   }
@@ -391,38 +625,6 @@ class _ArtCovers extends StatelessWidget {
             ),
           ),
       ]),
-    );
-  }
-}
-
-/// Halaman 2: kartu lirik tersinkron + ekualiser (dengar di mana saja).
-class _ArtLyrics extends StatelessWidget {
-  const _ArtLyrics();
-  @override
-  Widget build(BuildContext context) {
-    final lines = ['Kau datang seperti ombak pagi', 'Hangat, pelan, lalu pergi', 'Kutulis namamu di pasir', 'Biar laut yang menyimpan'];
-    return Transform.rotate(
-      angle: -0.04,
-      child: Container(
-        width: 290,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: Rave.plum, border: Border.all(color: Rave.paper, width: 2), boxShadow: const [BoxShadow(color: Rave.shadow, offset: Offset(6, 6))]),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            const Equalizer(playing: true),
-            const SizedBox(width: 10),
-            Text('PASANG SURUT · DARA LAUT', style: Rave.label(size: 9.5, color: Rave.mustard)),
-          ]),
-          const SizedBox(height: 14),
-          for (var k = 0; k < lines.length; k++)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(lines[k], style: Rave.body(size: 19, weight: FontWeight.w800, color: k == 1 ? Rave.mustard : Rave.paper.withValues(alpha: k < 1 ? 0.45 : 0.8))),
-            ),
-          const SizedBox(height: 14),
-          ClipRect(child: LinearProgressIndicator(value: 0.42, minHeight: 3, color: Rave.paper, backgroundColor: Rave.paper.withValues(alpha: 0.2))),
-        ]),
-      ),
     );
   }
 }
