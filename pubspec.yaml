@@ -1,0 +1,41 @@
+name: rave_mobile
+description: "RAVE Mobile — aplikasi dengar RAVE untuk Android."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+# Dependensi sengaja sedikit (tanpa paket state/router): audio latar belakang, HTTP, penyimpanan, cache gambar.
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.10.6
+  audio_service: ^0.18.19
+  audio_session: ^0.2.4
+  http: ^1.6.0
+  flutter_secure_storage: ^11.2.0
+  shared_preferences: ^2.5.6
+  cached_network_image: 4.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/
+  fonts:
+    - family: Bricolage
+      fonts:
+        - asset: assets/fonts/BricolageGrotesque-Variable.ttf
+    - family: Staatliches
+      fonts:
+        - asset: assets/fonts/Staatliches-Regular.ttf
+    - family: SpaceMono
+      fonts:
+        - asset: assets/fonts/SpaceMono-Regular.ttf
+        - asset: assets/fonts/SpaceMono-Bold.ttf
+          weight: 700

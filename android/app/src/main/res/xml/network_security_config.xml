@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BUILD UJI INTERNAL v0.1: HTTP diizinkan agar aplikasi bisa diuji terhadap server RAVE lokal (emulator 10.0.2.2,
+     IP LAN komputer dari ponsel). SEBELUM RILIS Play Store: ubah base-config menjadi cleartextTrafficPermitted="false"
+     dan pakai server HTTPS (lihat README → Rilis). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true"/>
+</network-security-config>
