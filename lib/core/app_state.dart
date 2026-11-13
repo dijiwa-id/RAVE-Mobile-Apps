@@ -35,16 +35,34 @@ class DataCache {
   Object? peek(String key) => _data[key]?.value;
   bool isFresh(String key) => _data[key] != null && DateTime.now().difference(_data[key]!.at) < fresh;
 
+  /// Muat dengan dedup per kunci. Catatan: callback `whenComplete` TIDAK boleh mengembalikan Future yang sedang
+  /// ditunggu (dulu `() => _inflight.remove(key)` mengembalikan Future itu sendiri → menunggu dirinya → macet selamanya).
   Future<Object> load(String key, Future<Object> Function() fetch, {bool force = false}) {
     if (!force && isFresh(key)) return Future.value(_data[key]!.value);
-    return _inflight[key] ??= fetch().then((v) {
-      _data[key] = (value: v, at: DateTime.now());
+    final running = _inflight[key];
+    if (running != null && !force) return running;
+    late final Future<Object> f;
+    f = fetch().then((v) {
+      if (identical(_inflight[key], f)) _data[key] = (value: v, at: DateTime.now());
       return v;
-    }).whenComplete(() => _inflight.remove(key));
+    });
+    _inflight[key] = f;
+    f.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (identical(_inflight[key], f)) _inflight.remove(key);
+    });
+    return f;
   }
 
-  void invalidate(String prefix) => _data.removeWhere((k, _) => k.startsWith(prefix));
-  void clear() => _data.clear();
+  /// Buang data & permintaan berjalan (mis. server diganti → jawaban server lama tidak boleh masuk cache).
+  void invalidate(String prefix) {
+    _data.removeWhere((k, _) => k.startsWith(prefix));
+    _inflight.removeWhere((k, _) => k.startsWith(prefix));
+  }
+
+  void clear() {
+    _data.clear();
+    _inflight.clear();
+  }
 }
 
 /// Status "Disukai" per lagu: dicek batch untuk daftar yang tampil, diubah optimistis.

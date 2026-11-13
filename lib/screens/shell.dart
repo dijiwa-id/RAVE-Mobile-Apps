@@ -6,6 +6,7 @@ import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import '../widgets/connection.dart';
 import '../widgets/mini_player.dart';
 import 'home.dart';
 import 'library.dart';
@@ -100,6 +101,7 @@ class _ShellState extends State<Shell> {
           ],
         ),
         bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ConnectionBanner(),
           const MiniPlayer(),
           DecoratedBox(
             decoration: const BoxDecoration(

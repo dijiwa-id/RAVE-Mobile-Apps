@@ -4,6 +4,7 @@ import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import '../widgets/home_shelves.dart';
 import '../widgets/media.dart';
 import 'login.dart';
 import 'routes.dart';
@@ -49,6 +50,7 @@ class HomeScreen extends StatelessWidget {
               ]),
             ),
           ),
+          const SliverToBoxAdapter(child: RecentlyPlayedShelf()),
           for (final sec in d.sections.where((x) => x.items.isNotEmpty))
             SliverToBoxAdapter(
               child: Shelf(
@@ -57,6 +59,8 @@ class HomeScreen extends StatelessWidget {
                 children: [for (final it in sec.items.take(12)) MediaCard(item: it)],
               ),
             ),
+          const SliverToBoxAdapter(child: FeaturedPlaylistsShelf()),
+          SliverToBoxAdapter(child: EventsShelf(city: app.api.user?.city ?? app.settings.city)),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ]),
       ),

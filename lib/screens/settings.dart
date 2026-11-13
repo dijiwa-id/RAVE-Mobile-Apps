@@ -7,6 +7,7 @@ import '../widgets/common.dart';
 import 'login.dart';
 import '../widgets/links.dart';
 import '../core/version.dart';
+import '../widgets/connection.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -30,15 +31,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final app = App.read(context);
     final u = Settings.normalize(_server.text);
     if (u == null) return setState(() => (_test = app.s.serverInvalid, _testOk = false));
-    try {
-      final old = app.settings.server;
-      await app.settings.setServer(u);
-      final j = await app.api.request<Map<String, dynamic>>('/v1/version', auth: false, timeout: const Duration(seconds: 6));
-      if (u != old) await app.settings.setServer(old);
-      setState(() => (_test = app.s.testOk('${j['version']}'), _testOk = true));
-    } catch (_) {
-      setState(() => (_test = app.s.offline, _testOk = false));
-    }
+    setState(() => (_test = '…', _testOk = true));
+    final v = await probeServer(app, u);
+    if (!mounted) return;
+    setState(() => v == null ? (_test = app.s.offline, _testOk = false) : (_test = app.s.testOk(v), _testOk = true));
   }
 
   Future<void> _saveServer() async {
@@ -46,10 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final u = Settings.normalize(_server.text);
     if (u == null) return setState(() => (_test = app.s.serverInvalid, _testOk = false));
     if (u == app.settings.server) return;
-    // Server lain = akun & data lain → keluar dulu agar token tidak terkirim ke server yang salah.
-    if (app.api.authed) await _logout();
-    await app.settings.setServer(u);
-    app.cache.clear();
+    await switchServer(app, u);
     if (mounted) toast(context, app.s.serverSaved);
   }
 
@@ -134,6 +127,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
             _Section(s.server, hint: s.serverHint, children: [
+              if (serverPresets.length > 1) ...[
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final p in serverPresets)
+                    OutlineButton(
+                      label: p.$1,
+                      active: _server.text == p.$2,
+                      onTap: () => setState(() {
+                        _server.text = p.$2;
+                        _test = null;
+                      }),
+                    ),
+                ]),
+                const SizedBox(height: 10),
+              ],
               TextField(controller: _server, keyboardType: TextInputType.url, autocorrect: false, style: const TextStyle(fontFamily: Rave.mono, fontSize: 13)),
               const SizedBox(height: 10),
               Row(children: [

@@ -10,6 +10,10 @@ class S {
 
   // Navigasi
   String get home => _('Beranda', 'Home');
+  String get recentlyPlayed => _('Diputar baru-baru ini', 'Recently played');
+  String get featuredPlaylists => _('Playlist pilihan RAVE', 'RAVE featured playlists');
+  String get upcomingEvents => _('Event mendatang', 'Upcoming events');
+  String eventsIn(String city) => _('Event di $city', 'Events in $city');
   String get search => _('Cari', 'Search');
   String get library => _('Pustaka', 'Library');
   String get liked => _('Lagu yang Disukai', 'Liked Songs');
@@ -212,9 +216,14 @@ class S {
   String get logout => _('Keluar', 'Sign out');
   String get premiumActive => _('Premium aktif', 'Premium active');
   String get free => _('Gratis (dengan iklan)', 'Free (with ads)');
-  String get serverHint => _('Alamat gateway RAVE, mis. https://rave.id. Dari emulator: http://10.0.2.2:8088.', 'RAVE gateway address, e.g. https://rave.id. From the emulator: http://10.0.2.2:8088.');
+  String get serverHint => _('Alamat gateway RAVE, mis. https://rave.id. Uji coba lokal: server demo di PC (port 8080).', 'RAVE gateway address, e.g. https://rave.id. Local testing: the demo server on your PC (port 8080).');
   String get serverInvalid => _('Alamat server tidak valid (gunakan http:// atau https://).', 'Invalid server address (use http:// or https://).');
   String get serverSaved => _('Server disimpan.', 'Server saved.');
+  String get serverDown => _('Server RAVE tidak terjangkau — mencoba lagi otomatis', 'RAVE server unreachable — retrying automatically');
+  String serverUnreachable(String name) => _('$name juga tidak terjangkau.', '$name is unreachable too.');
+  String useServer(String name) => _('Pakai $name', 'Use $name');
+  String get onboardingOfflineHint => _('Daftar artis butuh koneksi ke server. Coba lagi, pindah server, atau LEWATI dulu — bisa diatur nanti.', 'The artist list needs the server. Retry, switch server, or SKIP for now — you can set it later.');
+  String get serverPresets => _('Pilihan server', 'Server presets');
   String get test => _('Uji koneksi', 'Test connection');
   String testOk(String v) => _('Terhubung · RAVE $v', 'Connected · RAVE $v');
   String get language => _('Bahasa', 'Language');

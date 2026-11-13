@@ -48,6 +48,10 @@ flutter build apk --release --split-per-abi --target-platform android-arm64 --da
 ```
 
 - Emulator: `--dart-define=RAVE_API=http://10.0.2.2:8080` (10.0.2.2 = komputer host).
+- **Server demo:** di repo `Development` jalankan `./rave demo` (atau `--reset` untuk data bersih). Perintah itu mencetak alamat LAN
+  dan akun demo (`fan@rave.id`, `premium@rave.id`; kode OTP tampil di layar masuk). Ponsel & PC harus di Wi-Fi yang sama.
+- Pilihan cepat server di Pengaturan: `--dart-define=RAVE_API_PRESETS=Demo PC|http://<IP>:8080,Produksi PC|http://<IP>:8088`.
+  Skrip `C:\Users\Melod\rave-mobile-tools\build-apk.bat [URL]` membangun APK uji dengan preset ini.
 - Ponsel fisik: IP LAN komputer (Wi-Fi yang sama). `adb reverse` tidak berfungsi pada setup WSL di mesin pengembangan ini.
 - Instal: `adb install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`.
 

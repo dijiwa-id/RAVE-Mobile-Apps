@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../core/settings.dart';
 import '../widgets/common.dart';
+import '../widgets/connection.dart';
 import 'login.dart';
 import 'shell.dart';
 
@@ -20,12 +22,23 @@ class IntroGate extends StatefulWidget {
 
 class _IntroGateState extends State<IntroGate> {
   String stage = 'splash';
+  late final Future<void> _server;
+
+  @override
+  void initState() {
+    super.initState();
+    // Berjalan selama animasi splash: pilih server yang terjangkau sebelum onboarding/beranda memuat data.
+    final app = App.read(context);
+    _server = app.settings.resolveServer((u) => probeServer(app, u)).timeout(const Duration(seconds: 8), onTimeout: () {}).catchError((_) {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = App.of(context);
     final child = switch (stage) {
-      'splash' => Splash(onDone: () => setState(() => stage = app.settings.onboarded ? 'app' : 'onboarding')),
+      'splash' => Splash(onDone: () => _server.then((_) {
+            if (mounted) setState(() => stage = app.settings.onboarded ? 'app' : 'onboarding');
+          })),
       'onboarding' => Onboarding(onDone: () {
           app.settings.setOnboarded();
           setState(() => stage = 'app');
@@ -413,16 +426,139 @@ class _Chips extends StatelessWidget {
       ]);
 }
 
+/// Muat data onboarding SEKALI (bukan di setiap build): status memuat → data / galat yang jelas.
+/// Dimuat ulang otomatis bila server diganti; galat menawarkan "Coba lagi" & server lain dari preset.
+class _Remote extends StatefulWidget {
+  const _Remote({required this.path, required this.builder, this.query, this.offlineFallback = false});
+  final String path;
+  final Map<String, String>? query;
+  /// `data` null hanya bila [offlineFallback] dan pemuatan gagal (pemanggil memakai daftar cadangan).
+  final Widget Function(BuildContext, Json? data) builder;
+  final bool offlineFallback;
+  @override
+  State<_Remote> createState() => _RemoteState();
+}
+
+class _RemoteState extends State<_Remote> {
+  Json? data;
+  bool failed = false;
+  late final AppState app;
+  late String server;
+  String get key => widget.query == null ? widget.path : '${widget.path}?${Uri(queryParameters: widget.query).query}';
+
+  @override
+  void initState() {
+    super.initState();
+    app = App.read(context);
+    server = app.settings.server;
+    app.settings.addListener(_onSettings);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    app.settings.removeListener(_onSettings);
+    super.dispose();
+  }
+
+  void _onSettings() {
+    if (app.settings.server == server) return;
+    server = app.settings.server;
+    app.cache.invalidate(widget.path);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => failed = false);
+    try {
+      final v = await app.cache.load(key, () async => await app.api.request<Json>(widget.path, query: widget.query, auth: false, timeout: const Duration(seconds: 8)));
+      if (mounted) setState(() => data = v as Json);
+    } catch (_) {
+      if (mounted) setState(() => failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (data != null) return widget.builder(context, data);
+    if (failed) {
+      if (widget.offlineFallback) return widget.builder(context, null);
+      return _Offline(retry: _load);
+    }
+    return const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Rave.mustard)));
+  }
+}
+
+/// Server tak terjangkau di onboarding: coba lagi, pindah ke server preset lain, atau lewati (tombol LEWATI di atas).
+class _Offline extends StatefulWidget {
+  const _Offline({required this.retry});
+  final Future<void> Function() retry;
+  @override
+  State<_Offline> createState() => _OfflineState();
+}
+
+class _OfflineState extends State<_Offline> {
+  bool busy = false;
+  @override
+  Widget build(BuildContext context) {
+    final app = App.of(context);
+    final s = app.s;
+    final others = serverPresets.where((p) => p.$2 != app.settings.server).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.cloud_off_rounded, color: Rave.berry),
+          const SizedBox(width: 10),
+          Expanded(child: Text(s.serverDown, style: Rave.body(weight: FontWeight.w700))),
+        ]),
+        const SizedBox(height: 6),
+        Text(app.settings.server, style: const TextStyle(fontFamily: Rave.mono, fontSize: 12, color: Rave.muted)),
+        const SizedBox(height: 4),
+        Text(s.onboardingOfflineHint, style: Rave.body(size: 13, color: Rave.muted)),
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlineButton(
+            label: busy ? '…' : s.retry,
+            onTap: busy
+                ? null
+                : () async {
+                    setState(() => busy = true);
+                    await widget.retry();
+                    if (mounted) setState(() => busy = false);
+                  },
+          ),
+          for (final p in others)
+            OutlineButton(
+              label: s.useServer(p.$1),
+              onTap: busy
+                  ? null
+                  : () async {
+                      setState(() => busy = true);
+                      final v = await probeServer(app, p.$2);
+                      if (!mounted) return;
+                      setState(() => busy = false);
+                      if (v == null) return toast(this.context, s.serverUnreachable(p.$1));
+                      await switchServer(app, p.$2); // memicu muat ulang lewat listener pengaturan
+                    },
+            ),
+        ]),
+      ]),
+    );
+  }
+}
+
 /// Genre dari katalog (/v1/catalog/genres), cadangan daftar tetap bila offline.
 class _GenreChips extends StatelessWidget {
   const _GenreChips({required this.selected, required this.onTap});
   final Set<String> selected;
   final void Function(String) onTap;
   @override
-  Widget build(BuildContext context) => FutureBuilder<Json>(
-        future: App.read(context).cache.load('/v1/catalog/genres', () async => await App.read(context).api.get('/v1/catalog/genres')).then((v) => v as Json),
-        builder: (_, snap) {
-          final list = (snap.data?['data'] as List?)?.cast<Json>();
+  Widget build(BuildContext context) => _Remote(
+        path: '/v1/catalog/genres',
+        offlineFallback: true,
+        builder: (_, j) {
+          final list = (j?['data'] as List?)?.cast<Json>();
           final ids = list != null && list.isNotEmpty ? list.map((g) => g['id'] as String).toList() : _fallbackGenres;
           final labels = {for (final g in list ?? const <Json>[]) g['id'] as String: (g['name'] ?? g['id']) as String};
           return _Chips(options: ids, selected: selected, onTap: onTap, labels: labels);
@@ -437,13 +573,11 @@ class _ArtistPicker extends StatelessWidget {
   final void Function(String) onTap;
   @override
   Widget build(BuildContext context) {
-    final app = App.read(context);
-    return FutureBuilder<Object>(
-      future: app.cache.load('/v1/catalog/artists?limit=50', () async => await app.api.get('/v1/catalog/artists', query: {'limit': '50'})),
-      builder: (_, snap) {
-        if (snap.hasError) return ErrorState(message: app.s.offline, retry: () => (context as Element).markNeedsBuild());
-        final data = ((snap.data as Json?)?['data'] as List?)?.map((a) => ArtistSummary.fromJson(a as Json)).toList();
-        if (data == null) return const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Rave.mustard)));
+    return _Remote(
+      path: '/v1/catalog/artists',
+      query: const {'limit': '50'},
+      builder: (_, j) {
+        final data = ((j?['data'] as List?) ?? const []).map((a) => ArtistSummary.fromJson(a as Json)).toList();
         data.sort((a, b) => (b.genres.any(genres.contains) ? 1 : 0) - (a.genres.any(genres.contains) ? 1 : 0));
         return GridView.builder(
           shrinkWrap: true,

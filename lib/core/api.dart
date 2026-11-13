@@ -105,8 +105,10 @@ class Api extends ChangeNotifier {
         .whenComplete(() => _refreshing = null);
   }
 
-  Future<T> request<T>(String path, {String method = 'GET', Object? body, Map<String, String>? query, bool auth = true, Duration timeout = const Duration(seconds: 20)}) async {
-    final uri = Uri.parse('$base$path').replace(queryParameters: query == null || query.isEmpty ? null : query);
+  Future<T> request<T>(String path, {String method = 'GET', Object? body, Map<String, String>? query, bool auth = true, Duration timeout = const Duration(seconds: 20), String? server}) async {
+    // `server`: uji alamat lain tanpa token (lihat probeServer).
+    if (server != null) auth = false;
+    final uri = Uri.parse('${server ?? base}$path').replace(queryParameters: query == null || query.isEmpty ? null : query);
     Future<http.Response> go() {
       final h = <String, String>{'accept-language': settings.locale, 'x-app-version': 'android/$appVersion+$appBuild'};
       if (body != null) h['content-type'] = 'application/json';
@@ -119,7 +121,7 @@ class Api extends ChangeNotifier {
     http.Response r;
     try {
       r = await go();
-      if (r.statusCode == 401 && _refresh != null && await _doRefresh()) r = await go();
+      if (r.statusCode == 401 && auth && _refresh != null && await _doRefresh()) r = await go();
     } on TimeoutException {
       throw const OfflineError();
     } on http.ClientException {

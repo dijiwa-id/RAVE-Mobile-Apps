@@ -5,6 +5,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 10.0.2.2 = localhost komputer dari emulator Android.
 const defaultServer = String.fromEnvironment('RAVE_API', defaultValue: 'http://10.0.2.2:8088');
 
+/// Pilihan cepat server (Pengaturan & banner koneksi): `--dart-define=RAVE_API_PRESETS=Demo|http://…,Produksi|https://…`.
+/// Server default selalu ikut sebagai pilihan pertama.
+final List<(String, String)> serverPresets = () {
+  final out = <(String, String)>[('Default', defaultServer)];
+  for (final e in const String.fromEnvironment('RAVE_API_PRESETS').split(',')) {
+    final i = e.indexOf('|');
+    if (i <= 0) continue;
+    final url = Settings.normalize(e.substring(i + 1));
+    if (url == null) continue;
+    final k = out.indexWhere((p) => p.$2 == url);
+    if (k >= 0) {
+      out[k] = (e.substring(0, i).trim(), url);
+    } else {
+      out.add((e.substring(0, i).trim(), url));
+    }
+  }
+  return out;
+}();
+
 /// Pengaturan lokal (bukan rahasia): server, bahasa, kualitas streaming.
 class Settings extends ChangeNotifier {
   Settings._(this._p);
@@ -12,7 +31,27 @@ class Settings extends ChangeNotifier {
 
   static Future<Settings> load() async => Settings._(await SharedPreferences.getInstance());
 
-  String get server => _p.getString('server') ?? defaultServer;
+  String get server => _p.getString('server') ?? _auto ?? defaultServer;
+
+  /// Server pilihan otomatis (tidak disimpan): dipakai bila pengguna belum pernah menyimpan server sendiri.
+  String? _auto;
+
+  /// Pengguna menyimpan server sendiri → tidak ada pemilihan otomatis.
+  bool get serverIsCustom => _p.getString('server') != null;
+
+  /// Saat start: bila server default tak terjangkau dan pengguna belum memilih server, coba preset lain (paralel)
+  /// lalu pakai yang pertama menjawab — mis. emulator (10.0.2.2) atau PC di Wi-Fi lain. `probe` = versi RAVE atau null.
+  Future<void> resolveServer(Future<String?> Function(String url) probe) async {
+    if (serverIsCustom || serverPresets.length < 2) return;
+    if (await probe(defaultServer) != null) return;
+    final others = serverPresets.map((p) => p.$2).where((u) => u != defaultServer).toList();
+    final results = await Future.wait(others.map((u) async => await probe(u) == null ? null : u));
+    final ok = results.whereType<String>().firstOrNull;
+    if (ok != null && ok != _auto) {
+      _auto = ok;
+      notifyListeners();
+    }
+  }
   // BRD (NFR lokalisasi): Bahasa Indonesia default; Inggris hanya bila dipilih / perangkat berbahasa Inggris.
   String get locale => _p.getString('locale') ?? (PlatformDispatcher.instance.locale.languageCode == 'en' ? 'en' : 'id');
   String get quality => _p.getString('quality') ?? 'auto';

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resource yang dirujuk lewat NAMA dari Dart (audio_service androidNotificationIcon) tak terlihat oleh
+     resource shrinker R8 → terhapus di build release → notifikasi pemutar crash ("no valid small icon").
+     Jangan hapus file ini. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_rave,@mipmap/ic_launcher" />

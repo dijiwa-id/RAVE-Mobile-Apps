@@ -4,6 +4,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/id/1.1.0/) · Versi: [SemV
 (BUILD = versionCode Android, selalu naik). Naikkan dengan `dart run tool/bump_version.dart patch|minor|major|build`;
 tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
+## [0.2.2] - 2026-11-13
+
+### Diperbaiki
+- **Aplikasi tertutup sendiri saat memutar lagu** (build release): ikon notifikasi pemutar `ic_stat_rave` dihapus
+  resource shrinker R8 karena hanya dirujuk lewat nama dari Dart (`androidNotificationIcon`) → Android menolak
+  notifikasi media ("Invalid notification (no valid small icon)") dan mematikan proses. Kini dijaga lewat
+  `res/raw/keep.xml`.
+
+## [0.2.1] - 2026-11-13
+
+### Ditambahkan
+- Beranda setara web dengan data demo: **Diputar baru-baru ini** (putar riwayat mulai lagu itu), **Playlist pilihan
+  RAVE**, **Event di kotamu** (tiket dibuka di web RAVE). Rak yang gagal dimuat disembunyikan, feed utama tetap tampil.
+- Banner koneksi di atas mini-player: cek server saat start, saat server diganti, dan saat aplikasi kembali aktif;
+  coba ulang otomatis (5→60 dtk) dan tawarkan server lain dari preset. Tanpa polling selama server sehat.
+- Pilihan cepat server di Pengaturan (`--dart-define=RAVE_API_PRESETS=Nama|URL,…`).
+
+### Diubah
+- Build uji menunjuk server demo `http://<IP-LAN-PC>:8080` (`./rave demo`), bukan produksi lokal :8088.
+- Uji koneksi tidak lagi mengubah pengaturan sementara (alamat dikirim langsung, tanpa token).
+- Ganti server lewat satu jalur aman (`switchServer`): kirim event putar, keluar, bersihkan cache.
+
+### Diperbaiki
+- **Layar berputar terus** (onboarding artis, beranda, dll.): `DataCache.load` menunggu dirinya sendiri (`whenComplete` mengembalikan Future yang sama) sehingga data tak pernah tampil walau server menjawab 200. Diperbaiki + tes regresi. Onboarding kini memuat data sekali per langkah (bukan di
+  setiap build), dengan status galat jelas, tombol Coba lagi / Pakai server lain, dan batas waktu 8 dtk.
+- Saat start (selama splash), bila server default tak terjangkau dan pengguna belum memilih server sendiri, aplikasi
+  memakai server preset pertama yang menjawab (mis. emulator → 10.0.2.2:8080).
+
 ## [0.2.0] - 2026-11-13
 
 ### Ditambahkan
