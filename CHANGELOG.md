@@ -4,6 +4,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/id/1.1.0/) · Versi: [SemV
 (BUILD = versionCode Android, selalu naik). Naikkan dengan `dart run tool/bump_version.dart patch|minor|major|build`;
 tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
+## [0.2.4] - 2026-11-13
+
+### Diperbaiki
+- Info siaran Live: nama organisasi tidak lagi ditampilkan dobel bila sama dengan nama artis
+  ("Senja Kolektif · Senja Kolektif"), sama dengan desktop.
+
+### Diuji
+- Diuji di Pixel 7: beranda, musik latar & layar terkunci (tanpa crash notifikasi), Live (video, penonton, chat), Cari & kategori.
+
 ## [0.2.3] - 2026-11-13
 
 ### Ditambahkan

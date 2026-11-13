@@ -519,11 +519,15 @@ class _Info extends StatelessWidget {
         const SizedBox(height: 10),
         Text(s.title, style: Rave.body(size: 21, weight: FontWeight.w800, height: 1.15)),
         const SizedBox(height: 4),
+        // Nama org disembunyikan bila sama dengan nama artis (mis. "Senja Kolektif · Senja Kolektif"), seperti desktop.
         Wrap(children: [
           if (s.artist != null)
             GestureDetector(onTap: () => openItem(context, 'artist', s.artist!.slug), child: Text(s.artist!.name, style: Rave.body(size: 13.5, weight: FontWeight.w700))),
-          if (s.artist != null) Text(' · ', style: Rave.body(size: 13.5, color: Rave.muted)),
-          Text(s.orgName, style: Rave.body(size: 13.5, color: Rave.muted)),
+          if (s.artist != null && s.orgName.isNotEmpty && s.orgName.toLowerCase() != s.artist!.name.toLowerCase()) ...[
+            Text(' · ', style: Rave.body(size: 13.5, color: Rave.muted)),
+            Text(s.orgName, style: Rave.body(size: 13.5, color: Rave.muted)),
+          ] else if (s.artist == null)
+            Text(s.orgName, style: Rave.body(size: 13.5, color: Rave.muted)),
         ]),
         if (s.event != null) ...[
           const SizedBox(height: 10),
