@@ -6,9 +6,9 @@ import '../core/theme.dart';
 import '../widgets/common.dart';
 
 /// Buka layar Masuk/Daftar (aplikasi tetap bisa dipakai sebagai tamu). Mengembalikan true bila berhasil masuk.
-Future<bool> openLogin(BuildContext context, {bool signup = false}) async {
+Future<bool> openLogin(BuildContext context) async {
   final ok = await Navigator.of(context, rootNavigator: true).push<bool>(
-    MaterialPageRoute(fullscreenDialog: true, builder: (_) => LoginScreen(signup: signup)),
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => const LoginScreen()),
   );
   return ok == true;
 }
@@ -40,8 +40,7 @@ Future<bool> requireLogin(BuildContext context) async {
 
 /// Masuk / Daftar dengan OTP email (IAM RAVE hanya OTP — akun baru dibuat otomatis saat kode diverifikasi).
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.signup = false});
-  final bool signup;
+  const LoginScreen({super.key});
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }

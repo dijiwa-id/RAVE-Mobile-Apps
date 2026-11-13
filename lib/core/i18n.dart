@@ -75,8 +75,6 @@ class S {
               : _('Selamat malam', 'Good night');
 
   // Masuk
-  String get loginTitle => _('Masuk ke RAVE', 'Sign in to RAVE');
-  String get tagline => _('Musik independen Indonesia — dari kamar tidur sampai panggung.', 'Indonesian independent music — from bedrooms to stages.');
   String get email => 'Email';
   String get emailHint => _('kamu@contoh.com', 'you@example.com');
   String get sendCode => _('Kirim kode', 'Send code');
@@ -110,11 +108,6 @@ class S {
   String obReadySummary(String c, int g, int a) => _('$c · $g genre · $a artis — berandamu sudah dipersonalisasi.', '$c · $g genres · $a artists — your home is personalised.');
   String get obSkip => _('Lewati', 'Skip');
   String get obGuest => _('Jelajahi dulu', 'Just browse');
-  String get signup => _('Daftar gratis', 'Sign up free');
-  String get signupTitle => _('Daftar RAVE', 'Join RAVE');
-  String get signupBody => _('Gratis. Cukup email — kami kirim kode 6 digit, tanpa kata sandi.', 'Free. Just your email — we send a 6-digit code, no password.');
-  String get signupCta => _('Buat akun', 'Create account');
-  String get noAccount => _('Belum punya akun? Daftar', 'No account yet? Sign up');
   String get haveAccount => _('Sudah punya akun? Masuk', 'Already have an account? Sign in');
   String get guest => _('Tamu', 'Guest');
   String get guestTitle => _('Masuk untuk lanjut', 'Sign in to continue');
