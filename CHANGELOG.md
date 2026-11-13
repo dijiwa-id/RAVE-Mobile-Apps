@@ -4,6 +4,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/id/1.1.0/) · Versi: [SemV
 (BUILD = versionCode Android, selalu naik). Naikkan dengan `dart run tool/bump_version.dart patch|minor|major|build`;
 tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
+## [0.2.3] - 2026-11-13
+
+### Ditambahkan
+- **Live** setara web: daftar Sedang live / Akan datang / Siaran sebelumnya, layar tonton dengan pemutar HLS
+  (token diperbarui otomatis, tunggu saat belum mulai, sambung ulang saat terputus), jumlah penonton (heartbeat),
+  chat langsung (tamu membaca, kirim setelah masuk, mode lambat), gerbang masuk/tiket/terjadwal (hitung mundur)/selesai.
+  Rak **Sedang live** di beranda saat ada siaran; musik RAVE dijeda saat siaran diputar.
+- Halaman **kategori** (`/v1/catalog/browse/:id`): playlist bertag, artis, rilisan, lagu populer — sama dengan web.
+- Halaman **Podcast / Cerita & Fiksi** (tab, daftar acara).
+- Hasil pencarian kini juga menampilkan **episode**.
+
+### Diubah
+- Tab **Cari**: kisi kategori kini dari server (`/v1/catalog/browse`, warna & gambar sama dengan web) — bukan lagi
+  8 genre tetap yang hanya menjalankan pencarian teks. Tile Live ditambahkan; podcast/live mengikuti modul platform.
+- **Satu pintu masuk** "Masuk / Daftar" (beranda, Pustaka, Pengaturan, onboarding, lembar tamu) menggantikan tombol
+  Masuk + Daftar yang terpisah — login OTP membuat akun baru otomatis (sama dengan desktop).
+
 ## [0.2.2] - 2026-11-13
 
 ### Diperbaiki

@@ -8,10 +8,8 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/common.dart';
 import '../widgets/media.dart';
+import 'browse.dart';
 import 'routes.dart';
-
-const _genres = ['indie-pop', 'folk', 'rock', 'r-n-b', 'shoegaze', 'hip-hop', 'jazz', 'electronic'];
-const _tiles = [Rave.purple, Rave.teal, Rave.berry, Rave.plum, Rave.purpleSoft, Color(0xFFB98A00), Color(0xFF1A8FB0), Color(0xFFC0405A)];
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -75,30 +73,11 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ]),
           ),
-          Expanded(child: q.isEmpty ? _browse(s) : _Results(key: ValueKey(q), q: q)),
+          Expanded(child: q.isEmpty ? const BrowseGrid() : _Results(key: ValueKey(q), q: q)),
         ]),
       ),
     );
   }
-
-  Widget _browse(dynamic s) => GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 220, mainAxisExtent: 96, crossAxisSpacing: 12, mainAxisSpacing: 12),
-        itemCount: _genres.length,
-        itemBuilder: (_, i) => Material(
-          color: _tiles[i % _tiles.length],
-          child: InkWell(
-            onTap: () {
-              _ctl.text = _genres[i];
-              setState(() => q = _genres[i]);
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Align(alignment: Alignment.topLeft, child: Text(_genres[i].replaceAll('-', ' ').toUpperCase(), style: Rave.poster(26))),
-            ),
-          ),
-        ),
-      );
 }
 
 class _Results extends StatelessWidget {
@@ -166,6 +145,12 @@ class _Results extends StatelessWidget {
             SliverToBoxAdapter(
               child: Shelf(title: s.podcasts, children: [
                 for (final x in r.shows) MediaCard(item: MediaItem(id: x.id, kind: 'show', title: x.title, subtitle: x.publisher, href: '/app/show/${x.id}', imageUrl: x.coverUrl)),
+              ]),
+            ),
+          if (r.episodes.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Shelf(title: s.episodes, children: [
+                for (final e in r.episodes) MediaCard(item: MediaItem(id: e.id, kind: 'episode', title: e.title, subtitle: e.description ?? '', href: '/app/episode/${e.id}', imageUrl: e.coverUrl)),
               ]),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),

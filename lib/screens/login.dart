@@ -29,15 +29,13 @@ Future<bool> requireLogin(BuildContext context) async {
           const SizedBox(height: 8),
           Text(s.guestBody, style: Rave.body(color: Rave.muted)),
           const SizedBox(height: 20),
-          PrimaryButton(label: s.signup, onTap: () => Navigator.pop(sheet, 'signup')),
-          const SizedBox(height: 10),
-          Center(child: OutlineButton(label: s.signIn, onTap: () => Navigator.pop(sheet, 'login'))),
+          PrimaryButton(label: s.signInOrUp, onTap: () => Navigator.pop(sheet, 'login')),
         ]),
       ),
     ),
   );
   if (go == null || !context.mounted) return false;
-  return openLogin(context, signup: go == 'signup');
+  return openLogin(context);
 }
 
 /// Masuk / Daftar dengan OTP email (IAM RAVE hanya OTP — akun baru dibuat otomatis saat kode diverifikasi).
@@ -116,9 +114,9 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          Text((widget.signup ? s.signupTitle : s.loginTitle).toUpperCase(), style: Rave.poster(44)),
+          Text(s.authTitle.toUpperCase(), style: Rave.poster(44)),
           const SizedBox(height: 8),
-          Text(widget.signup ? s.signupBody : s.tagline, style: Rave.body(color: Rave.muted)),
+          Text(s.authBody, style: Rave.body(color: Rave.muted)),
           const SizedBox(height: 28),
           if (!_codeStep) ...[
             Eyebrow(s.email),
@@ -155,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
               decoration: const InputDecoration(counterText: ''),
             ),
             const SizedBox(height: 16),
-            PrimaryButton(label: widget.signup ? s.signupCta : s.signIn, busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
+            PrimaryButton(label: s.signIn, busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               TextButton(onPressed: () => setState(() => (_codeStep = false, _code.text = '', _err = null)), child: Text(s.changeEmail, style: Rave.body(color: Rave.muted))),
@@ -170,12 +168,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Text(_err!, style: Rave.body(size: 13)),
             ),
           const SizedBox(height: 24),
-          Center(
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute<bool>(fullscreenDialog: true, builder: (_) => LoginScreen(signup: !widget.signup))),
-              child: Text(widget.signup ? s.haveAccount : s.noAccount, style: Rave.body(weight: FontWeight.w700, color: Rave.mustard)),
-            ),
-          ),
           const SizedBox(height: 8),
           Center(child: Text('${s.server}: ${app.settings.server.replaceFirst(RegExp(r'^https?://'), '')}', style: Rave.label(size: 9.5, color: Rave.subtle))),
         ]),

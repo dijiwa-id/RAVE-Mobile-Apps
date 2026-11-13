@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'album.dart';
+import 'browse.dart';
+import 'live.dart';
 import 'artist.dart';
 import 'playlist.dart';
 import 'show.dart';
@@ -18,6 +20,8 @@ void openItem(BuildContext context, String kind, String id) {
     'liked' => const PlaylistScreen(id: 'liked'),
     'show' => ShowScreen(id: id),
     'settings' => const SettingsScreen(),
+    'genre' => GenreScreen(id: id),
+    'live' => LiveWatchScreen(id: id),
     _ => null,
   };
   if (page != null) {

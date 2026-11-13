@@ -227,7 +227,7 @@ class _OnboardingState extends State<Onboarding> {
     await _save();
     if (!mounted) return;
     if (auth != null) {
-      final ok = await openLogin(context, signup: auth == 'signup');
+      final ok = await openLogin(context);
       if (!ok) return;
     }
     widget.onDone();
@@ -313,13 +313,9 @@ class _OnboardingState extends State<Onboarding> {
                 duration: const Duration(milliseconds: 260),
                 child: step == steps - 1
                     ? Column(key: const ValueKey('cta'), children: [
-                        PrimaryButton(label: s.signup, onTap: () => _finish(auth: 'signup')),
+                        PrimaryButton(label: s.signInOrUp, onTap: () => _finish(auth: 'login')),
                         const SizedBox(height: 10),
-                        Row(children: [
-                          Expanded(child: _Ghost(label: s.signIn, onTap: () => _finish(auth: 'login'))),
-                          const SizedBox(width: 10),
-                          Expanded(child: _Ghost(label: s.obGuest, onTap: _finish)),
-                        ]),
+                        SizedBox(width: double.infinity, child: _Ghost(label: s.obGuest, onTap: _finish)),
                       ])
                     : SizedBox(
                         key: ValueKey('next$step'),

@@ -23,6 +23,14 @@ void openInActiveTab(String kind, String id) {
   if (ctx != null) openItem(ctx, kind, id);
 }
 
+/// Pindah tab (0 = Beranda) dari mana pun, mis. kategori "Dibuat Untukmu" (href `/app`).
+void selectShellTab(int i) {
+  final sh = _shell;
+  if (sh == null || !sh.mounted) return;
+  sh._navs[sh.tab].currentState?.popUntil((r) => r.isFirst);
+  sh._select(i);
+}
+
 /// Kerangka utama: tab Beranda/Cari/Pustaka Kamu/Premium (navigator & riwayat sendiri) + aksi Buat;
 /// mini-player selalu terlihat di atas tab bar. Tombol kembali Android menutup halaman di tab dulu.
 class Shell extends StatefulWidget {

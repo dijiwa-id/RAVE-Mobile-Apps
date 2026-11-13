@@ -14,6 +14,52 @@ class S {
   String get featuredPlaylists => _('Playlist pilihan RAVE', 'RAVE featured playlists');
   String get upcomingEvents => _('Event mendatang', 'Upcoming events');
   String eventsIn(String city) => _('Event di $city', 'Events in $city');
+
+  // Jelajahi & kategori (sama dengan /app/search & /app/genre di web)
+  String get browseAll => _('Jelajahi semua', 'Browse all');
+  String get popularSongs => _('Lagu populer', 'Popular songs');
+  String get releasesTitle => _('Rilisan', 'Releases');
+  String get noContentInCategory => _('Belum ada konten di kategori ini', 'Nothing in this category yet');
+  String get storiesTab => _('Cerita & Fiksi', 'Stories & Fiction');
+
+  // Live (sama dengan /app/live di web)
+  String get live => 'Live';
+  String get showAll => _('Lihat semua', 'Show all');
+  String get liveNow => _('Sedang live', 'Live now');
+  String get liveNowEyebrow => _('Sedang tayang', 'On air now');
+  String get liveUpcoming => _('Akan datang', 'Upcoming');
+  String get livePast => _('Siaran sebelumnya', 'Past streams');
+  String get liveNoScheduled => _('Belum ada siaran terjadwal.', 'No scheduled streams yet.');
+  String get liveNobody => _('Belum ada yang live', 'Nobody is live right now');
+  String get liveNobodyBody => _('Siaran berikutnya tampil di bawah — cek lagi nanti.', 'Upcoming streams are listed below — check back soon.');
+  String get liveUnavailable => _('Live belum tersedia', 'Live is not available');
+  String get liveInterrupted => _('Terputus', 'Interrupted');
+  String get liveAired => _('Sudah tayang', 'Aired');
+  String get liveSoon => _('Segera', 'Soon');
+  String get liveTicket => _('Tiket', 'Ticket');
+  String get liveFree => _('Gratis', 'Free');
+  String get liveTicketHolders => _('Khusus pemegang tiket', 'Ticket holders only');
+  String get liveEnded => _('Siaran selesai', 'Stream ended');
+  String livePeak(String n) => _('Puncak $n penonton', 'Peak $n viewers');
+  String get liveSeeOther => _('Lihat siaran lain', 'See other streams');
+  String get liveSignInToWatch => _('Masuk untuk menonton', 'Sign in to watch');
+  String get liveRequiresAccount => _('Siaran ini memerlukan akun RAVE (gratis).', 'This stream requires a free RAVE account.');
+  String livePartOfEvent(String e) => _('Bagian dari event $e.', 'Part of the event $e.');
+  String get liveRequiresTicket => _('Siaran ini memerlukan tiket.', 'This stream requires a ticket.');
+  String get liveBuyTicket => _('Beli tiket', 'Buy ticket');
+  String get liveNotStarted => _('Belum dimulai', 'Not started yet');
+  String liveScheduled(String t) => _('Dijadwalkan $t', 'Scheduled for $t');
+  String get liveStartingSoon => _('Segera dimulai', 'Starting soon');
+  String get liveAutoPlay => _('Pemutar muncul otomatis saat siaran dimulai.', 'The player appears automatically when the stream starts.');
+  String get liveWaiting => _('Menunggu siaran…', 'Waiting for the stream…');
+  String get liveReconnecting => _('Menyambung ulang…', 'Reconnecting…');
+  String get liveNotFound => _('Siaran tidak ditemukan', 'Stream not found');
+  String get liveChat => _('Chat langsung', 'Live chat');
+  String get liveChatEmpty => _('Belum ada pesan. Sapa duluan!', 'No messages yet. Say hi!');
+  String get liveChatHint => _('Kirim pesan…', 'Send a message…');
+  String get liveChatSignIn => _('Masuk untuk ikut chat', 'Sign in to chat');
+  String liveSlowmode(int s) => _('Mode lambat: tunggu $s dtk', 'Slow mode: wait ${s}s');
+  String liveStarted(String t) => _('Mulai $t', 'Started $t');
   String get search => _('Cari', 'Search');
   String get library => _('Pustaka', 'Library');
   String get liked => _('Lagu yang Disukai', 'Liked Songs');
@@ -37,6 +83,10 @@ class S {
   String codeSent(String e) => _('Kode 6 digit dikirim ke $e.', 'A 6-digit code was sent to $e.');
   String get code => _('Kode', 'Code');
   String get signIn => _('Masuk', 'Sign in');
+  /// Satu pintu masuk (OTP: akun baru dibuat otomatis) — sama dengan desktop.
+  String get signInOrUp => _('Masuk / Daftar', 'Sign in');
+  String get authTitle => _('Masuk atau daftar', 'Sign in or sign up');
+  String get authBody => _('Cukup email — kami kirim kode 6 digit. Belum punya akun? Akun dibuat otomatis, tanpa kata sandi.', 'Just your email — we send a 6-digit code. New here? Your account is created automatically, no password.');
   String get changeEmail => _('Ganti email', 'Change email');
   String get resend => _('Kirim ulang', 'Resend');
   String devCode(String c) => _('Kode dev: $c', 'Dev code: $c');

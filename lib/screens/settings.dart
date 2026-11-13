@@ -82,9 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               else ...[
                 Text(s.guestBody, style: Rave.body(color: Rave.muted)),
                 const SizedBox(height: 14),
-                PrimaryButton(label: s.signup, onTap: () => openLogin(context, signup: true)),
-                const SizedBox(height: 10),
-                OutlineButton(label: s.signIn, onTap: () => openLogin(context)),
+                PrimaryButton(label: s.signInOrUp, onTap: () => openLogin(context)),
               ],
             ]),
             _Section(s.language, children: [

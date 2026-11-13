@@ -223,10 +223,11 @@ class SearchResult {
   final List<Track> tracks;
   final List<ReleaseSummary> releases;
   final List<Show> shows;
-  const SearchResult(this.artists, this.tracks, this.releases, this.shows);
-  factory SearchResult.fromJson(Json j) =>
-      SearchResult(_list(j['artists'], ArtistSummary.fromJson), _list(j['tracks'], Track.fromJson), _list(j['releases'], ReleaseSummary.fromJson), _list(j['shows'], Show.fromJson));
-  bool get isEmpty => artists.isEmpty && tracks.isEmpty && releases.isEmpty && shows.isEmpty;
+  final List<Episode> episodes;
+  const SearchResult(this.artists, this.tracks, this.releases, this.shows, [this.episodes = const []]);
+  factory SearchResult.fromJson(Json j) => SearchResult(_list(j['artists'], ArtistSummary.fromJson), _list(j['tracks'], Track.fromJson), _list(j['releases'], ReleaseSummary.fromJson),
+      _list(j['shows'], Show.fromJson), _list(j['episodes'], Episode.fromJson));
+  bool get isEmpty => artists.isEmpty && tracks.isEmpty && releases.isEmpty && shows.isEmpty && episodes.isEmpty;
 }
 
 class LibrarySummary {

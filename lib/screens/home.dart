@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/home_shelves.dart';
 import '../widgets/media.dart';
+import 'live.dart';
 import 'login.dart';
 import 'routes.dart';
 
@@ -33,9 +34,7 @@ class HomeScreen extends StatelessWidget {
                 Row(children: [
                   Expanded(child: Eyebrow('RAVE · ${app.api.authed ? s.home : s.guest}', color: Rave.mustard)),
                   if (!app.api.authed) ...[
-                    TextButton(onPressed: () => openLogin(context), child: Text(s.signIn.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper))),
-                    const SizedBox(width: 4),
-                    _SignupChip(onTap: () => openLogin(context, signup: true), label: s.signup),
+                    _SignupChip(onTap: () => openLogin(context), label: s.signInOrUp),
                     const SizedBox(width: 4),
                   ],
                   IconButton(tooltip: s.settings, onPressed: () => openItem(context, 'settings', ''), icon: const Icon(Icons.settings_outlined)),
@@ -50,6 +49,7 @@ class HomeScreen extends StatelessWidget {
               ]),
             ),
           ),
+          const SliverToBoxAdapter(child: LiveNowShelf()),
           const SliverToBoxAdapter(child: RecentlyPlayedShelf()),
           for (final sec in d.sections.where((x) => x.items.isNotEmpty))
             SliverToBoxAdapter(
