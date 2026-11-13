@@ -101,6 +101,8 @@ class S {
   String get obCityTitle => _('Kamu dari kota mana?', 'Where are you based?');
   String get obCityHint => _('Untuk gig, artis lokal & rekomendasi skena kotamu.', 'For gigs, local artists & your city scene.');
   String get obGenreTitle => _('Genre favoritmu?', 'Your favourite genres?');
+  String obGenresShowAll(int n) => _('Lihat semua $n genre', 'Show all $n genres');
+  String get obGenresPopularOnly => _('Tampilkan genre populer saja', 'Show popular genres only');
   String obPicked(int n) => n == 0 ? _('Pilih satu atau lebih.', 'Pick one or more.') : _('$n dipilih', '$n selected');
   String get obArtistTitle => _('Pilih 3 artis atau lebih', 'Pick 3 or more artists');
   String obArtistsPicked(int n) => n >= 3 ? _('$n artis dipilih — mantap!', '$n artists picked — nice!') : _('$n/3 dipilih', '$n/3 picked');

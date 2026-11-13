@@ -190,7 +190,8 @@ class Onboarding extends StatefulWidget {
 }
 
 const _cities = ['Jakarta', 'Bandung', 'Yogyakarta', 'Surabaya', 'Malang', 'Bali', 'Medan', 'Semarang', 'Makassar', 'Solo', 'Palembang', 'Lainnya'];
-const _fallbackGenres = ['indie-pop', 'folk', 'akustik', 'rock', 'post-punk', 'indie-rock', 'r-n-b', 'soul', 'shoegaze', 'dream-pop', 'hip-hop', 'pop', 'electronic', 'jazz', 'dangdut'];
+/// Cadangan offline = genre populer taksonomi bersama (Development/packages/domain/src/genres.ts).
+const _fallbackGenres = ['pop', 'indie-pop', 'bedroom-pop', 'city-pop', 'k-pop', 'indie-rock', 'shoegaze', 'lo-fi', 'rock', 'hip-hop', 'r-n-b', 'electronic', 'dangdut', 'dangdut-koplo', 'jazz', 'folk', 'akustik'];
 
 class _OnboardingState extends State<Onboarding> {
   final _pc = PageController();
@@ -544,11 +545,18 @@ class _OfflineState extends State<_Offline> {
   }
 }
 
-/// Genre dari katalog (/v1/catalog/genres), cadangan daftar tetap bila offline.
-class _GenreChips extends StatelessWidget {
+/// Genre dari katalog (/v1/catalog/genres), cadangan daftar tetap bila offline. Genre `popular` (taksonomi bersama
+/// @rave/domain) + yang sudah dipilih tampil lebih dulu; sisanya di balik "Lihat semua" — sama dengan web.
+class _GenreChips extends StatefulWidget {
   const _GenreChips({required this.selected, required this.onTap});
   final Set<String> selected;
   final void Function(String) onTap;
+  @override
+  State<_GenreChips> createState() => _GenreChipsState();
+}
+
+class _GenreChipsState extends State<_GenreChips> {
+  bool all = false;
   @override
   Widget build(BuildContext context) => _Remote(
         path: '/v1/catalog/genres',
@@ -557,7 +565,20 @@ class _GenreChips extends StatelessWidget {
           final list = (j?['data'] as List?)?.cast<Json>();
           final ids = list != null && list.isNotEmpty ? list.map((g) => g['id'] as String).toList() : _fallbackGenres;
           final labels = {for (final g in list ?? const <Json>[]) g['id'] as String: (g['name'] ?? g['id']) as String};
-          return _Chips(options: ids, selected: selected, onTap: onTap, labels: labels);
+          final popular = {for (final g in list ?? const <Json>[]) if (g['popular'] == true) g['id'] as String};
+          // Server lama tanpa penanda `popular` → tampilkan semua seperti sebelumnya.
+          final canCollapse = popular.isNotEmpty && popular.length < ids.length;
+          final shown = all || !canCollapse ? ids : ids.where((id) => popular.contains(id) || widget.selected.contains(id)).toList();
+          final s = App.of(context).s;
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _Chips(options: shown, selected: widget.selected, onTap: widget.onTap, labels: labels),
+            if (canCollapse)
+              TextButton(
+                onPressed: () => setState(() => all = !all),
+                child: Text(all ? s.obGenresPopularOnly : s.obGenresShowAll(ids.length),
+                    style: Rave.body(size: 13, weight: FontWeight.w700, color: Rave.paper).copyWith(decoration: TextDecoration.underline)),
+              ),
+          ]);
         },
       );
 }
