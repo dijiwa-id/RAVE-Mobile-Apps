@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter/material.dart';
 
 import '../core/app_state.dart';
@@ -8,12 +10,14 @@ import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/connection.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/motion.dart';
 import 'home.dart';
 import 'library.dart';
 import 'premium.dart';
 import '../widgets/playlist_actions.dart';
 import 'routes.dart';
 import 'search.dart';
+import 'browse.dart';
 
 _ShellState? _shell;
 
@@ -51,7 +55,9 @@ class _ShellState extends State<Shell> {
     _shell = this;
     _life = AppLifecycleListener(onPause: () => App.read(context).player.onBackground(), onDetach: () => App.read(context).player.onBackground());
     final app = App.read(context);
-    // Profil terbaru (status Premium dsb.).
+    // Kebijakan tema platform terbaru (default & boleh-pilih).
+    unawaited(refreshAppearance(app));
+    // Profil terbaru (status Premium, tema akun, dsb.).
     if (app.api.authed) app.api.get('/v1/me').then((j) => app.api.setUser(Me.fromJson(j))).catchError((_) {});
     _msgs = app.player.messages.listen((m) {
       if (mounted) toast(context, m);
@@ -72,9 +78,15 @@ class _ShellState extends State<Shell> {
       showCreateSheet(_navs[tab].currentContext ?? context);
       return;
     }
+    HapticFeedback.selectionClick();
     if (i == tab) {
-      // Ketuk tab aktif lagi → kembali ke akar tab itu.
-      _navs[i].currentState?.popUntil((r) => r.isFirst);
+      // Ketuk tab aktif lagi → kembali ke akar tab itu; sudah di akar → gulir ke atas (beranimasi).
+      final nav = _navs[i].currentState;
+      if (nav != null && nav.canPop()) {
+        nav.popUntil((r) => r.isFirst);
+      } else {
+        scrollToTop(_navs[i].currentContext);
+      }
     } else {
       setState(() => tab = i);
     }
@@ -83,6 +95,7 @@ class _ShellState extends State<Shell> {
   @override
   Widget build(BuildContext context) {
     final s = App.of(context).s;
+    final rc = context.rc;
     final roots = [const HomeScreen(), const SearchScreen(), const LibraryScreen(), const PremiumScreen()];
     return PopScope(
       canPop: false,
@@ -112,15 +125,17 @@ class _ShellState extends State<Shell> {
           const ConnectionBanner(),
           const MiniPlayer(),
           DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xE60E0C0F), Rave.canvas]),
-            ),
+            decoration: rc.isLight
+                ? BoxDecoration(color: rc.base, border: const Border(top: BorderSide(color: Color(0x1F181818))))
+                : const BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xE60E0C0F), Rave.canvas]),
+                  ),
             child: NavigationBarTheme(
               data: NavigationBarThemeData(
                 backgroundColor: Colors.transparent,
                 indicatorColor: Colors.transparent,
-                labelTextStyle: WidgetStateProperty.resolveWith((st) => Rave.body(size: 10.5, weight: FontWeight.w700, color: st.contains(WidgetState.selected) ? Rave.paper : Rave.subtle)),
-                iconTheme: WidgetStateProperty.resolveWith((st) => IconThemeData(color: st.contains(WidgetState.selected) ? Rave.mustard : Rave.subtle, size: 25)),
+                labelTextStyle: WidgetStateProperty.resolveWith((st) => Rave.body(size: 10.5, weight: FontWeight.w700, color: st.contains(WidgetState.selected) ? rc.text : rc.subtle)),
+                iconTheme: WidgetStateProperty.resolveWith((st) => IconThemeData(color: st.contains(WidgetState.selected) ? rc.accent : rc.subtle, size: 25)),
               ),
               child: NavigationBar(
                 height: 64,
@@ -130,7 +145,7 @@ class _ShellState extends State<Shell> {
                 destinations: [
                   NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home_rounded), label: s.home),
                   NavigationDestination(icon: const Icon(Icons.search_rounded), selectedIcon: const Icon(Icons.manage_search_rounded), label: s.search),
-                  NavigationDestination(icon: const Icon(Icons.library_music_outlined), selectedIcon: const Icon(Icons.library_music_rounded), label: s.yourLibrary),
+                  NavigationDestination(icon: const Icon(Icons.library_music_outlined), selectedIcon: const Icon(Icons.library_music_rounded), label: s.library),
                   NavigationDestination(icon: const _PremiumIcon(active: false), selectedIcon: const _PremiumIcon(active: true), label: 'Premium'),
                   NavigationDestination(icon: const Icon(Icons.add_circle_outline_rounded), label: s.create),
                 ],
@@ -148,11 +163,15 @@ class _PremiumIcon extends StatelessWidget {
   const _PremiumIcon({required this.active});
   final bool active;
   @override
-  Widget build(BuildContext context) => Container(
-        width: 25,
-        height: 25,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF151316), border: Border.all(color: active ? Rave.mustard : Rave.subtle, width: 1.6)),
-        alignment: Alignment.center,
-        child: Container(width: 9, height: 9, decoration: BoxDecoration(shape: BoxShape.circle, color: active ? Rave.mustard : Rave.subtle)),
-      );
+  Widget build(BuildContext context) {
+    final rc = context.rc;
+    final c = active ? rc.accent : rc.subtle;
+    return Container(
+      width: 25,
+      height: 25,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: rc.isLight ? rc.base : const Color(0xFF151316), border: Border.all(color: c, width: 1.6)),
+      alignment: Alignment.center,
+      child: Container(width: 9, height: 9, decoration: BoxDecoration(shape: BoxShape.circle, color: c)),
+    );
+  }
 }

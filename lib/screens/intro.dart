@@ -9,6 +9,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../core/settings.dart';
 import '../widgets/common.dart';
+import '../widgets/feedback.dart';
 import '../widgets/connection.dart';
 import 'login.dart';
 import 'shell.dart';
@@ -36,13 +37,24 @@ class _IntroGateState extends State<IntroGate> {
   Widget build(BuildContext context) {
     final app = App.of(context);
     final child = switch (stage) {
-      'splash' => Splash(onDone: () => _server.then((_) {
-            if (mounted) setState(() => stage = app.settings.onboarded ? 'app' : 'onboarding');
-          })),
-      'onboarding' => Onboarding(onDone: () {
-          app.settings.setOnboarded();
-          setState(() => stage = 'app');
-        }),
+      // Splash & onboarding = poster bermerek, selalu gelap (kedua tema).
+      'splash' => DarkZone(
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: Rave.overlayFor(Brightness.dark),
+            child: Splash(onDone: () => _server.then((_) {
+                  if (mounted) setState(() => stage = app.settings.onboarded ? 'app' : 'onboarding');
+                })),
+          ),
+        ),
+      'onboarding' => DarkZone(
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: Rave.overlayFor(Brightness.dark),
+            child: Onboarding(onDone: () {
+              app.settings.setOnboarded();
+              setState(() => stage = 'app');
+            }),
+          ),
+        ),
       _ => const Shell(),
     };
     return AnimatedSwitcher(
@@ -535,7 +547,7 @@ class _OfflineState extends State<_Offline> {
                       final v = await probeServer(app, p.$2);
                       if (!mounted) return;
                       setState(() => busy = false);
-                      if (v == null) return toast(this.context, s.serverUnreachable(p.$1));
+                      if (v == null) return toast(this.context, s.serverUnreachable(p.$1), kind: ToastKind.error);
                       await switchServer(app, p.$2); // memicu muat ulang lewat listener pengaturan
                     },
             ),
@@ -615,8 +627,8 @@ class _ArtistPicker extends StatelessWidget {
                   duration: const Duration(milliseconds: 160),
                   child: Stack(clipBehavior: Clip.none, children: [
                     Container(
-                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: on ? Rave.mustard : Colors.transparent, width: 3)),
-                      child: Cover(a.imageUrl, size: 92, round: true),
+                      decoration: BoxDecoration(border: Border.all(color: on ? Rave.mustard : Rave.ink, width: 3), boxShadow: Rave.hardShadow),
+                      child: Cover(a.imageUrl, size: 92),
                     ),
                     if (on)
                       Positioned(
@@ -624,7 +636,7 @@ class _ArtistPicker extends StatelessWidget {
                         bottom: 2,
                         child: Container(
                           padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(color: Rave.mustard, shape: BoxShape.circle, border: Border.all(color: Rave.ink, width: 2)),
+                          decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2)),
                           child: const Icon(Icons.check_rounded, size: 16, color: Rave.ink),
                         ),
                       ),

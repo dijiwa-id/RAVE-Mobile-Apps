@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../player/player.dart';
 import 'api.dart';
+import 'appearance.dart';
 import 'i18n.dart';
 import 'models.dart';
 import 'settings.dart';
@@ -15,6 +16,14 @@ class AppState {
   final Likes likes;
   final cache = DataCache();
   S get s => S.of(settings.locale);
+
+  /// Tema efektif (pilihan): akun → perangkat → default platform (lihat [resolveThemeChoice]).
+  String get themeChoice => resolveThemeChoice(
+        account: api.user?.theme,
+        device: settings.themePref,
+        platformDefault: settings.platformTheme,
+        allowUser: settings.allowUserTheme,
+      );
 }
 
 class App extends InheritedWidget {
@@ -22,6 +31,7 @@ class App extends InheritedWidget {
   final AppState state;
   static AppState of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<App>()!.state;
   static AppState read(BuildContext c) => c.getInheritedWidgetOfExactType<App>()!.state;
+  static AppState? maybeRead(BuildContext c) => c.getInheritedWidgetOfExactType<App>()?.state;
   @override
   bool updateShouldNotify(App old) => true;
 }
@@ -53,10 +63,14 @@ class DataCache {
     return f;
   }
 
+  /// Naik setiap data pustaka dibuang (playlist dibuat/dihapus, simpan/ikuti) → layar Pustaka memuat ulang.
+  final libraryRevision = ValueNotifier<int>(0);
+
   /// Buang data & permintaan berjalan (mis. server diganti → jawaban server lama tidak boleh masuk cache).
   void invalidate(String prefix) {
     _data.removeWhere((k, _) => k.startsWith(prefix));
     _inflight.removeWhere((k, _) => k.startsWith(prefix));
+    if ('/v1/library'.startsWith(prefix) || prefix.startsWith('/v1/library')) libraryRevision.value++;
   }
 
   void clear() {
@@ -128,6 +142,28 @@ Future<void> syncOnboarding(AppState app) async {
   } catch (_) {
     // best-effort: dapat diulang dari Pengaturan nanti
   }
+}
+
+/// Isi yang bisa diputar + judul & sampul (untuk stiker "Pita berputar").
+Future<({List<Playable> items, String title, String? image})> mediaOf(AppState app, String kind, String id) async {
+  final api = app.api;
+  switch (kind) {
+    case 'release':
+      final r = Release.fromJson(await api.get('/v1/catalog/releases/$id'));
+      return (items: r.tracks.map(Playable.fromTrack).toList(), title: r.title, image: r.coverUrl);
+    case 'artist':
+      final a = Artist.fromJson(await api.get('/v1/catalog/artists/${Uri.encodeComponent(id)}'));
+      return (items: a.topTracks.map(Playable.fromTrack).toList(), title: a.name, image: a.imageUrl);
+    case 'playlist':
+      final j = await api.get('/v1/library/playlists/$id');
+      return (
+        items: (j['items'] as List).map((x) => Playable.fromTrack(Track.fromJson(x['track'] as Json))).toList(),
+        title: (j['title'] ?? '') as String,
+        image: j['cover_url'] as String?,
+      );
+  }
+  final items = await playablesOf(app, kind, id);
+  return (items: items, title: items.isEmpty ? '' : items.first.title, image: items.isEmpty ? null : items.first.imageUrl);
 }
 
 /// Muat item yang bisa diputar dari sebuah kartu (album/artis/playlist/episode).

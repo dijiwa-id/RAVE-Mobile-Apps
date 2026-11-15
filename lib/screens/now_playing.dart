@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -7,17 +9,23 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/common.dart';
+import '../widgets/feedback.dart';
+import '../widgets/cover_color.dart';
+import '../widgets/media.dart';
+import '../widgets/motion.dart';
+import '../widgets/vinyl.dart';
 import '../widgets/deck.dart';
 import 'shell.dart';
 
 void openNowPlaying(BuildContext context) {
   Navigator.of(context, rootNavigator: true).push(
     PageRouteBuilder<void>(
-      opaque: true,
+      // Tidak opak: saat ditarik ke bawah, layar sebelumnya terlihat di baliknya.
+      opaque: false,
       transitionDuration: const Duration(milliseconds: 280),
       reverseTransitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, _, _) => const NowPlayingScreen(),
-      transitionsBuilder: (_, a, _, child) => SlideTransition(
+      transitionsBuilder: (context, a, _, child) => RaveMotion.reduced(context) ? child : SlideTransition(
         position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)),
         child: child,
       ),
@@ -33,135 +41,201 @@ class NowPlayingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = App.of(context);
     final s = app.s;
-    return ListenableBuilder(
+    // Layar ambient berwarna sampul = "pulau gelap" di kedua tema (teks terang, bilah status terang).
+    return DarkZone(
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: Rave.overlayFor(Brightness.dark),
+      child: ListenableBuilder(
       listenable: Listenable.merge([app.player, app.likes]),
       builder: (context, _) {
         final p = app.player;
         final c = p.current;
         if (c == null) return const Scaffold();
         final liked = app.likes.has(c.id);
+        final imageUrl = app.api.media(c.imageUrl);
         return Scaffold(
-          body: GestureDetector(
-            onVerticalDragEnd: (d) => (d.primaryVelocity ?? 0) > 300 ? Navigator.pop(context) : null,
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Rave.purple, Rave.plum, Rave.canvas], stops: [0, 0.45, 0.85]),
+          backgroundColor: Colors.transparent,
+          // Tarik ke bawah mengikuti jari (menampakkan layar di bawahnya), lepas → tutup / pantul kembali.
+          body: DragToDismiss(
+            onDismiss: () => Navigator.pop(context),
+            // Latar ambient mengikuti warna dominan sampul (web NowPlayingPanel + useCoverColor).
+            child: CoverColorBuilder(
+              url: imageUrl,
+              builder: (context, tint) => DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [tint, Color.lerp(tint, Rave.canvas, 0.6)!, Rave.canvas],
+                  stops: const [0, 0.45, 0.85],
+                ),
               ),
               child: SafeArea(
                 child: LayoutBuilder(builder: (context, box) {
-                  final art = (box.maxWidth - 48).clamp(160.0, box.maxHeight * 0.46);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(children: [
-                      Row(children: [
-                        IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32)),
-                        Expanded(child: Column(children: [Eyebrow(s.playingFrom, size: 9.5), const SizedBox(height: 2), Text('RAVE', style: Rave.body(weight: FontWeight.w700))])),
-                        IconButton(
-                          tooltip: s.queue,
-                          onPressed: () => _sheet(context, const _QueueSheet()),
-                          icon: const Icon(Icons.queue_music_rounded),
-                        ),
-                      ]),
-                      const Spacer(),
-                      Hero(
-                        tag: 'cover',
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 36, offset: Offset(0, 16))]),
-                          child: Cover(c.imageUrl, size: art),
+                  // Semua baris memakai gutter yang sama ([Rave.gutter]); tombol ikon di tepi diberi padding
+                  // gutter − sisipan ikon → MUKA ikon yang terlihat sejajar tepi isi, area sentuh tetap 48 dp.
+                  const g = Rave.gutter;
+                  final cw = box.maxWidth - 2 * g;
+                  final disc = app.settings.vinylMotion;
+                  EdgeInsets edge({double l = 0, double r = 0}) => EdgeInsets.fromLTRB(g - l, 0, g - r, 0);
+                  return Column(children: [
+                      Padding(
+                        padding: edge(l: _inset(32), r: _inset(24)),
+                        child: Row(children: [
+                          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32)),
+                          Expanded(child: Column(children: [Eyebrow(s.playingFrom, size: 9.5), const SizedBox(height: 2), Text('RAVE', style: Rave.body(weight: FontWeight.w700))])),
+                          IconButton(
+                            tooltip: s.queue,
+                            onPressed: () => _sheet(context, const _QueueSheet()),
+                            icon: const Icon(Icons.queue_music_rounded),
+                          ),
+                        ]),
+                      ),
+                      // Sampul (+ piringan) selebar isi; di layar pendek mengecil mengikuti tinggi (tak pernah overflow).
+                      Expanded(
+                        child: Padding(
+                          padding: edge(),
+                          child: LayoutBuilder(builder: (context, area) {
+                            final ratio = VinylCover.ratio(disc);
+                            final w = min(cw, (area.maxHeight - 24) / ratio).clamp(80.0, 560.0);
+                            return Align(
+                              alignment: w >= cw - 0.5 ? Alignment.centerLeft : Alignment.center,
+                              child: VinylCover(
+                                key: const Key('np-art'),
+                                width: w,
+                                image: c.imageUrl,
+                                labelColor: tint,
+                                disc: disc,
+                                spinning: p.playing && !p.buffering && disc && !RaveMotion.reduced(context),
+                                tape: p.ad != null ? null : p.session?.codecLabel,
+                              ),
+                            );
+                          }),
                         ),
                       ),
-                      const Spacer(),
-                      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(c.title.toUpperCase(), maxLines: 2, overflow: TextOverflow.ellipsis, style: Rave.poster(34)),
-                            const SizedBox(height: 4),
-                            GestureDetector(
-                              onTap: c.artistKey == null
-                                  ? null
-                                  : () {
-                                      Navigator.pop(context);
-                                      _openInTab(context, 'artist', c.artistKey!);
-                                    },
-                              child: Text(c.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 16, color: Rave.muted)),
-                            ),
-                          ]),
-                        ),
-                        if (app.api.authed && c.kind == 'track')
-                          IconButton(
-                            tooltip: liked ? s.unlike : s.like,
-                            iconSize: 28,
-                            onPressed: () => app.likes.toggle(c.id, app.cache).catchError((_) {}),
-                            icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? Rave.mustard : Rave.paper),
+                      Padding(
+                        padding: edge(r: app.api.authed && c.kind == 'track' ? _inset(28) : 0),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(c.title.toUpperCase(), key: const Key('np-title'), maxLines: 2, overflow: TextOverflow.ellipsis, style: Rave.poster(34)),
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: c.artistKey == null
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        _openInTab(context, 'artist', c.artistKey!);
+                                      },
+                                child: Text(c.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 16, color: Rave.muted)),
+                              ),
+                            ]),
                           ),
-                      ]),
+                          if (app.api.authed && c.kind == 'track')
+                            IconButton(
+                              tooltip: liked ? s.unlike : s.like,
+                              iconSize: 28,
+                              onPressed: () => toggleLike(context, c.id, image: c.imageUrl),
+                              icon: LikeHeart(liked: liked, size: 28, color: Rave.paper),
+                            ),
+                        ]),
+                      ),
                       const SizedBox(height: 14),
-                      const _Progress(),
+                      Padding(padding: edge(), child: const _Progress()),
                       if (p.error != null)
                         Padding(
-                          padding: const EdgeInsets.only(top: 2),
+                          padding: edge().copyWith(top: 2),
                           child: Text(p.error!, textAlign: TextAlign.center, style: Rave.body(size: 12.5, color: Rave.mustard)),
+                        )
+                      else if (p.session?.losslessPending ?? false)
+                        Padding(
+                          padding: edge().copyWith(top: 2),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            const Icon(Icons.hourglass_top_rounded, size: 13, color: Rave.mustard),
+                            const SizedBox(width: 6),
+                            Flexible(child: Text(s.losslessPendingShort.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.label(size: 10, color: Rave.mustard))),
+                          ]),
                         ),
                       const SizedBox(height: 14),
-                      Center(
-                        child: LayoutBuilder(builder: (context, box) {
-                          // Lebar tombol menyesuaikan layar (5 tombol + celah + padding baki).
-                          final k = ((box.maxWidth - 12 - 4 * 6) / 5.6).clamp(44.0, 66.0);
-                          return DeckTray(children: [
-                            DeckKey(semantic: s.shuffle, toggle: true, active: p.shuffle, locked: p.ad != null, width: k * 0.85, height: k * 0.78, onTap: p.toggleShuffle, child: const Icon(Icons.shuffle_rounded)),
-                            DeckKey(semantic: s.prev, locked: p.ad != null, width: k, height: k * 0.92, onTap: p.prev, child: const Icon(Icons.skip_previous_rounded)),
-                            DeckKey(
-                              semantic: p.playing ? s.pause : s.play,
-                              play: true,
-                              width: k * 1.35,
-                              height: k * 0.92,
-                              onTap: p.error != null ? p.retry : p.toggle,
-                              child: p.buffering && p.error == null
-                                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Rave.ink))
-                                  : Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                            ),
-                            DeckKey(semantic: s.next, locked: p.ad != null, width: k, height: k * 0.92, onTap: p.next, child: const Icon(Icons.skip_next_rounded)),
-                            DeckKey(
-                              semantic: s.repeat,
-                              toggle: true,
-                              active: p.repeat != LoopMode.off,
-                              locked: p.ad != null,
-                              width: k * 0.85,
-                              height: k * 0.78,
-                              onTap: p.cycleRepeat,
-                              child: Icon(p.repeat == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded),
-                            ),
-                          ]);
+                      // Transport ala web (NowPlaying `.deck-tray`): lima tuts rapat dalam SATU baki selebar isi —
+                      // tepi baki tepat di gutter, tuts berproporsi tetap (toggle 1 · lompat 1,25 · PLAY 1,6) dengan
+                      // celah 4 dp, semua dipusatkan pada satu garis. Lebar tuts terkecil tetap ≥ 48 dp (target sentuh).
+                      Padding(
+                        padding: edge(),
+                        child: Builder(builder: (context) {
+                          const pad = 6.0, gap = 4.0, flex = [1.0, 1.25, 1.6, 1.25, 1.0];
+                          final unit = (cw - 2 * (pad + 1) - 4 * gap) / flex.fold<double>(0, (a, b) => a + b);
+                          final main = (unit * 1.12).clamp(Rave.tap, 60.0), small = main * 0.74;
+                          final w = [for (final f in flex) unit * f];
+                          return DeckTray(
+                            key: const Key('np-tray'),
+                            gap: gap,
+                            padding: pad,
+                            children: [
+                              DeckKey(semantic: s.shuffle, toggle: true, active: p.shuffle, locked: p.ad != null, width: w[0], height: small, onTap: () => toggleShuffleWithToast(context), child: const Icon(Icons.shuffle_rounded)),
+                              DeckKey(semantic: s.prev, locked: p.ad != null, width: w[1], height: main, onTap: p.prev, child: const Icon(Icons.skip_previous_rounded)),
+                              DeckKey(
+                                semantic: p.playing ? s.pause : s.play,
+                                play: true,
+                                width: w[2],
+                                height: main,
+                                onTap: p.error != null ? p.retry : p.toggle,
+                                child: p.buffering && p.error == null
+                                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Rave.ink))
+                                    : Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                              ),
+                              DeckKey(semantic: s.next, locked: p.ad != null, width: w[3], height: main, onTap: p.next, child: const Icon(Icons.skip_next_rounded)),
+                              DeckKey(
+                                key: const Key('np-last'),
+                                semantic: s.repeat,
+                                toggle: true,
+                                active: p.repeat != LoopMode.off,
+                                locked: p.ad != null,
+                                width: w[4],
+                                height: small,
+                                onTap: () => cycleRepeatWithToast(context),
+                                child: Icon(p.repeat == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded),
+                              ),
+                            ],
+                          );
                         }),
                       ),
                       const SizedBox(height: 14),
-                      Row(children: [
-                        _Chip(icon: Icons.queue_music_rounded, label: s.queue, onTap: () => _sheet(context, const _QueueSheet())),
-                        const SizedBox(width: 10),
-                        if (c.kind == 'track') _Chip(icon: Icons.lyrics_outlined, label: s.lyrics, onTap: () => _sheet(context, const _LyricsSheet())),
-                        const Spacer(),
-                        IconButton(tooltip: s.share, onPressed: () => _share(context, c), icon: const Icon(Icons.ios_share_rounded, size: 22)),
-                      ]),
+                      Padding(
+                        padding: edge(r: _inset(22)),
+                        child: Row(children: [
+                          Flexible(child: _Chip(icon: Icons.queue_music_rounded, label: s.queue, onTap: () => _sheet(context, const _QueueSheet()))),
+                          const SizedBox(width: 10),
+                          if (c.kind == 'track') Flexible(child: _Chip(icon: Icons.lyrics_outlined, label: s.lyrics, onTap: () => _sheet(context, const _LyricsSheet()))),
+                          const Spacer(),
+                          IconButton(tooltip: s.share, onPressed: () => _share(context, c), icon: const Icon(Icons.ios_share_rounded, size: 22)),
+                        ]),
+                      ),
                       const SizedBox(height: 8),
-                    ]),
-                  );
+                    ]);
                 }),
               ),
+            ),
             ),
           ),
         );
       },
+    ),
+      ),
     );
   }
 
   void _openInTab(BuildContext context, String kind, String id) => openInActiveTab(kind, id);
+
+  /// Sisipan visual ikon berukuran [icon] di dalam IconButton 48 dp (jarak muka ikon ke tepi area sentuh).
+  static double _inset(double icon) => (Rave.tap - icon) / 2;
 
   /// Bagikan: salin tautan web lagu ke papan klip (tanpa paket share tambahan).
   void _share(BuildContext context, Playable c) {
     final app = App.read(context);
     final url = '${app.settings.server}/app/${c.kind == 'track' ? (c.releaseId != null ? 'album/${c.releaseId}' : 'track/${c.id}') : 'episode/${c.id}'}';
     Clipboard.setData(ClipboardData(text: '${c.title} — ${c.subtitle}\n$url'));
-    toast(context, app.s.linkCopied);
+    toast(context, app.s.linkCopied, kind: ToastKind.ok);
   }
 
   void _sheet(BuildContext context, Widget child) => showModalBottomSheet<void>(
@@ -193,11 +267,16 @@ class _ProgressState extends State<_Progress> {
         final status = ad != null ? 'AD' : p.buffering && p.error == null ? 'BUFFER' : p.playing ? 'PLAY' : p.current != null ? 'PAUSE' : 'STOP';
         return Column(children: [
           DeckLcd(
+            key: const Key('np-lcd'),
             status: status,
             codec: ad != null ? null : p.session?.codecLabel,
             time: fmtDuration(ad != null ? ad.elapsed.inMilliseconds : pos.round()),
             on: p.playing && !p.buffering,
             dim: p.current == null,
+            // Spektrum mengikuti lagu: hanya lagu katalog (episode & iklan → animasi dekoratif).
+            trackId: ad == null && p.current?.kind == 'track' ? p.current!.id : null,
+            position: () => p.audio.position,
+            spectrum: SpectrumRepo.forApi(App.of(context).api),
           ),
           const SizedBox(height: 10),
           DeckSlider(
@@ -234,7 +313,7 @@ class _Chip extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(icon, size: 18, color: Rave.paper),
               const SizedBox(width: 8),
-              Text(label.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)),
+              Flexible(child: Text(label.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.label(size: 11, color: Rave.paper))),
             ]),
           ),
         ),

@@ -97,8 +97,64 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- Preferensi pemutar & tampilan di perangkat ini (sama dengan web stores/prefs.ts) ----
+  /// Normalisasi volume memakai `loudness_gain_db` sesi pemutaran.
+  bool get normalizeVolume => _p.getBool('normalize') ?? false;
+  /// Equalizer (khusus Premium; tetap dilewati untuk akun Gratis walau tersimpan aktif).
+  bool get eqOn => _p.getBool('eqOn') ?? false;
+  /// Preset equalizer terakhir (`flat`, `bass`, …) atau `custom`.
+  String get eqPreset => _p.getString('eqPreset') ?? 'flat';
+  /// Gain kustom per pita perangkat (dB). Kosong/beda jumlah pita → pakai [eqPreset].
+  List<double> get eqGains => (_p.getStringList('eqGains') ?? const []).map((e) => double.tryParse(e) ?? 0).toList();
+  bool get compactLibrary => _p.getBool('compactLibrary') ?? false;
+  bool get vinylMotion => _p.getBool('vinylMotion') ?? true;
+  /// Efek audio (equalizer/loudness) gagal dibuat di perangkat ini → jangan dipasang lagi (pemutaran tetap jalan).
+  bool get fxUnsupported => _p.getBool('fxUnsupported') ?? false;
+
+  // ---- Tema (web lib/theme.ts): pilihan perangkat + kebijakan platform terakhir (agar start offline tetap benar) ----
+  /// Pilihan tema di perangkat ini (tamu & cadangan bila akun belum memilih). null = belum memilih.
+  String? get themePref => _p.getString('themePref');
+  /// `appearance.player_theme` terakhir dari platform (bawaan gelap).
+  String get platformTheme => _p.getString('platformTheme') ?? 'dark';
+  /// `appearance.allow_user_theme` terakhir dari platform.
+  bool get allowUserTheme => _p.getBool('allowUserTheme') ?? true;
+
+  Future<void> setThemePref(String? v) async {
+    v == null ? await _p.remove('themePref') : await _p.setString('themePref', v);
+    notifyListeners();
+  }
+
+  /// Simpan kebijakan tema platform (dari `GET /v1/platform/config`); berubah → bangun ulang tema.
+  Future<void> setPlatformAppearance({required String theme, required bool allowUser}) async {
+    if (theme == platformTheme && allowUser == allowUserTheme) return;
+    await _p.setString('platformTheme', theme);
+    await _p.setBool('allowUserTheme', allowUser);
+    notifyListeners();
+  }
+
+  Future<void> setBool(String key, bool v) async {
+    await _p.setBool(key, v);
+    notifyListeners();
+  }
+
+  Future<void> setEq({String? preset, List<double>? gains}) async {
+    if (preset != null) await _p.setString('eqPreset', preset);
+    if (gains != null) await _p.setStringList('eqGains', gains.map((g) => g.toStringAsFixed(1)).toList());
+    notifyListeners();
+  }
+
   /// Kualitas yang diminta ke server: hemat data → rendah, selain itu pilihan pengguna.
   String get requestQuality => dataSaver ? 'low' : quality;
+
+  /// Kualitas yang dikirim untuk akun ini: Gratis/tamu → bawaan server (`auto`, atau `low` saat hemat data) —
+  /// tidak pernah meminta kualitas Premium; Premium → pilihan pengguna.
+  String requestQualityFor({required bool premium}) => dataSaver ? 'low' : (premium ? quality : 'auto');
+
+  /// Akun Gratis: pilihan tersimpan di atas plafon Gratis dikembalikan ke `auto` (mis. setelah Premium berakhir).
+  Future<void> enforceFreeQuality({required bool premium, String freeMax = 'normal'}) async {
+    if (premium || quality == 'auto') return;
+    if (QualityPolicy.rank(quality) > QualityPolicy.rank(freeMax)) await setQuality('auto');
+  }
 
   /// Event putar yang belum terkirim (royalti tidak hilang saat aplikasi ditutup/offline).
   List<String> get pendingEvents => _p.getStringList('pendingEvents') ?? const [];
@@ -110,4 +166,36 @@ class Settings extends ChangeNotifier {
     if (u == null || !(u.scheme == 'http' || u.scheme == 'https') || u.host.isEmpty) return null;
     return u.replace(path: '', query: null, fragment: null).toString().replaceAll(RegExp(r'/+$'), '');
   }
+}
+
+/// Kebijakan kualitas streaming dari Super Admin (`GET /v1/platform/config` → `settings.streaming.*`), ditegakkan server
+/// saat sesi pemutaran dibuat — klien hanya menyesuaikan pilihan (sama dengan web Settings.tsx):
+/// opsi di atas plafon Premium disembunyikan; di atas plafon Gratis dikunci untuk akun Gratis.
+class QualityPolicy {
+  const QualityPolicy({this.freeMax = 'normal', this.premiumMax = 'lossless', this.losslessRes = '24-bit/96 kHz'});
+  static const order = ['auto', 'low', 'normal', 'high', 'lossless'];
+  static const _res = {'16_44': '16-bit/44.1 kHz', '24_48': '24-bit/48 kHz', '24_96': '24-bit/96 kHz'};
+  final String freeMax, premiumMax, losslessRes;
+
+  factory QualityPolicy.fromSettings(Map<String, dynamic> cfg) {
+    String pick(Object? v, List<String> allowed, String d) => v is String && allowed.contains(v) ? v : d;
+    final losslessOn = cfg['streaming.lossless_enabled'] != false;
+    final premiumRaw = pick(cfg['streaming.premium_max_quality'], const ['normal', 'high', 'lossless'], 'lossless');
+    return QualityPolicy(
+      freeMax: pick(cfg['streaming.free_max_quality'], const ['low', 'normal', 'high'], 'normal'),
+      premiumMax: !losslessOn && premiumRaw == 'lossless' ? 'high' : premiumRaw,
+      losslessRes: _res[cfg['streaming.lossless_max_resolution']] ?? '24-bit/96 kHz',
+    );
+  }
+
+  static int rank(String q) => order.indexOf(q);
+
+  /// Pilihan yang ditampilkan (≤ plafon Premium).
+  List<String> get options => order.where((q) => rank(q) <= rank(premiumMax)).toList();
+
+  /// Dikunci (label Premium) untuk akun Gratis.
+  bool locked(String q, {required bool premium}) => !premium && q != 'auto' && rank(q) > rank(freeMax);
+
+  /// Pilihan tersimpan di atas plafon Premium → turunkan ke plafon.
+  String clamp(String q) => rank(q) > rank(premiumMax) ? premiumMax : q;
 }

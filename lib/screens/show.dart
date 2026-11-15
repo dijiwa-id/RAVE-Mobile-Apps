@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/collection.dart';
 import '../widgets/common.dart';
+import '../widgets/motion.dart';
 
 class ShowScreen extends StatelessWidget {
   const ShowScreen({super.key, required this.id});
@@ -18,13 +19,14 @@ class ShowScreen extends StatelessWidget {
     return ApiView<Show>(
       path: '/v1/catalog/shows/$id',
       parse: Show.fromJson,
-      loading: const Scaffold(body: Center(child: CircularProgressIndicator(color: Rave.mustard))),
+      loading: const Scaffold(body: SafeArea(child: ListSkeleton())),
       builder: (context, sh, _) => ListenableBuilder(
         listenable: app.player,
         builder: (context, _) {
           final p = app.player;
           final eps = sh.episodes.map((e) => Playable.fromEpisode(e, sh.title, contentWarning: sh.contentWarning)).toList();
-          void playAt(int i) => p.current?.id == eps[i].id ? p.toggle() : p.playQueue(eps, i);
+          final key = 'show:${sh.id}';
+          void playAt(int i) => p.current?.id == eps[i].id ? p.toggle() : p.playQueue(eps, i, key);
           return CollectionPage(
             kind: s.kind('show'),
             title: sh.title,
@@ -33,14 +35,14 @@ class ShowScreen extends StatelessWidget {
             meta: Text('${sh.publisher} · ${sh.category} · ${sh.episodes.length} ${s.episodes}'),
             actions: [
               const Spacer(),
-              if (eps.isNotEmpty) PlayButton(playing: eps.any((e) => e.id == p.current?.id) && p.playing, semantic: s.play, onTap: () => playAt(0)),
+              if (eps.isNotEmpty) PlayFab(size: 56, playKey: key, semantic: s.play, onPlay: () => playAt(0)),
             ],
             slivers: [
               if (sh.description != null)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(sh.description!, style: Rave.body(size: 14, color: Rave.paper.withValues(alpha: 0.85), height: 1.45)),
+                    child: Text(sh.description!, style: Rave.body(size: 14, color: context.rc.text.withValues(alpha: 0.85), height: 1.45)),
                   ),
                 ),
               SliverList.separated(
@@ -57,20 +59,20 @@ class ShowScreen extends StatelessWidget {
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Row(children: [
-                              Flexible(child: Text(e.title, style: Rave.body(size: 15, weight: FontWeight.w700, color: cur ? Rave.mustard : Rave.paper))),
-                              if (e.premium) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_rounded, size: 14, color: Rave.mustard)),
+                              Flexible(child: Text(e.title, style: Rave.body(size: 15, weight: FontWeight.w700, color: cur ? context.rc.accent : context.rc.text))),
+                              if (e.premium) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.lock_rounded, size: 14, color: context.rc.accent)),
                             ]),
                             if (e.description != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: Text(e.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: Rave.body(size: 13, color: Rave.muted)),
+                                child: Text(e.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: Rave.body(size: 13, color: context.rc.muted)),
                               ),
                             const SizedBox(height: 6),
-                            Eyebrow('${e.publishedAt.length >= 10 ? e.publishedAt.substring(0, 10) : ''} · ${fmtTotal(e.durationMs, app.settings.locale == 'id')}', color: Rave.subtle, size: 9.5),
+                            Eyebrow('${e.publishedAt.length >= 10 ? e.publishedAt.substring(0, 10) : ''} · ${fmtTotal(e.durationMs, app.settings.locale == 'id')}', color: context.rc.subtle, size: 9.5),
                           ]),
                         ),
                         const SizedBox(width: 10),
-                        PlayButton(size: 40, playing: cur && p.playing, semantic: s.play, onTap: () => playAt(i)),
+                        PlayFab(size: 40, playKey: 'episode:${e.id}', semantic: '${s.play} ${e.title}', onPlay: () => playAt(i)),
                       ]),
                     ),
                   );

@@ -7,6 +7,7 @@ import '../core/theme.dart';
 import '../screens/login.dart';
 import '../screens/shell.dart';
 import 'common.dart';
+import 'feedback.dart';
 
 /// Tab "Buat": lembar aksi (saat ini: Playlist). Tamu diminta masuk dulu.
 Future<void> showCreateSheet(BuildContext context) async {
@@ -25,11 +26,11 @@ Future<void> showCreateSheet(BuildContext context) async {
             leading: Container(
               width: 52,
               height: 52,
-              decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: Rave.hardShadow),
+              decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: context.rc.hard()),
               child: const Icon(Icons.queue_music_rounded, color: Rave.ink),
             ),
             title: Text(s.createPlaylist, style: Rave.body(size: 16, weight: FontWeight.w700)),
-            subtitle: Text(s.createPlaylistHint, style: Rave.body(size: 13, color: Rave.muted)),
+            subtitle: Text(s.createPlaylistHint, style: Rave.body(size: 13, color: context.rc.muted)),
             onTap: () async {
               Navigator.pop(sheet);
               final id = await createPlaylist(context);
@@ -50,8 +51,8 @@ Future<String?> createPlaylist(BuildContext context, {String? addTrackId}) async
   final title = await showDialog<String>(
     context: context,
     builder: (d) => AlertDialog(
-      backgroundColor: Rave.base,
-      shape: const RoundedRectangleBorder(side: BorderSide(color: Rave.line)),
+      backgroundColor: context.rc.sheet,
+      shape: RoundedRectangleBorder(side: BorderSide(color: context.rc.isLight ? Rave.ink : Rave.line)),
       title: Text(s.namePlaylist.toUpperCase(), style: Rave.poster(28)),
       content: TextField(
         controller: ctl,
@@ -62,7 +63,7 @@ Future<String?> createPlaylist(BuildContext context, {String? addTrackId}) async
         onSubmitted: (v) => Navigator.pop(d, v.trim()),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(d), child: Text(s.cancel, style: Rave.body(color: Rave.muted))),
+        TextButton(onPressed: () => Navigator.pop(d), child: Text(s.cancel, style: Rave.body(color: context.rc.muted))),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Rave.mustard, foregroundColor: Rave.ink, shape: const RoundedRectangleBorder()),
           onPressed: () => Navigator.pop(d, ctl.text.trim()),
@@ -79,10 +80,10 @@ Future<String?> createPlaylist(BuildContext context, {String? addTrackId}) async
     if (addTrackId != null) await app.api.post('/v1/library/playlists/$id/items', {'track_id': addTrackId});
     app.cache.invalidate('/v1/library');
     HapticFeedback.mediumImpact();
-    if (context.mounted) toast(context, addTrackId != null ? s.addedTo(title) : s.playlistCreated(title));
+    if (context.mounted) toast(context, addTrackId != null ? s.addedTo(title) : s.playlistCreated(title), kind: ToastKind.ok);
     return id;
   } catch (e) {
-    if (context.mounted) toast(context, e.toString());
+    if (context.mounted) toastError(context, e);
     return null;
   }
 }
@@ -105,7 +106,7 @@ Future<void> addToPlaylist(BuildContext context, Track t) async {
         builder: (context, list, _) => ListView(padding: const EdgeInsets.only(bottom: 24), children: [
           Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: Text(s.addToPlaylist.toUpperCase(), style: Rave.poster(26))),
           ListTile(
-            leading: Container(width: 48, height: 48, color: Rave.raised, child: const Icon(Icons.add_rounded, color: Rave.mustard)),
+            leading: Container(width: 48, height: 48, color: context.rc.isLight ? context.rc.hover : Rave.raised, child: Icon(Icons.add_rounded, color: context.rc.accent)),
             title: Text(s.newPlaylist, style: Rave.body(size: 15, weight: FontWeight.w700)),
             onTap: () async {
               Navigator.pop(sheet);
@@ -114,17 +115,17 @@ Future<void> addToPlaylist(BuildContext context, Track t) async {
           ),
           for (final p in list)
             ListTile(
-              leading: Cover(p.coverUrl, size: 48),
+              leading: Cover(p.coverUrl, size: 48, placeholderIcon: Icons.queue_music_rounded),
               title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 15, weight: FontWeight.w600)),
-              subtitle: Text(s.songs(p.trackCount), style: Rave.body(size: 12.5, color: Rave.muted)),
+              subtitle: Text(s.songs(p.trackCount), style: Rave.body(size: 12.5, color: context.rc.muted)),
               onTap: () async {
                 Navigator.pop(sheet);
                 try {
                   await app.api.post('/v1/library/playlists/${p.id}/items', {'track_id': t.id});
                   app.cache.invalidate('/v1/library');
-                  if (context.mounted) toast(context, s.addedTo(p.title));
+                  if (context.mounted) toast(context, s.addedTo(p.title), kind: ToastKind.ok, image: p.coverUrl);
                 } catch (e) {
-                  if (context.mounted) toast(context, e.toString());
+                  if (context.mounted) toastError(context, e);
                 }
               },
             ),

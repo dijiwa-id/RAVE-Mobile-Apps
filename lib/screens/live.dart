@@ -9,7 +9,10 @@ import '../core/live.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import '../widgets/feedback.dart';
+import '../widgets/home_shelves.dart';
 import '../widgets/links.dart';
+import '../widgets/motion.dart';
 import 'browse.dart';
 import 'login.dart';
 import 'routes.dart';
@@ -133,7 +136,7 @@ class _CountdownState extends State<Countdown> {
     final s = App.of(context).s;
     final at = DateTime.tryParse(widget.until);
     final left = at == null ? Duration.zero : at.difference(DateTime.now());
-    return Text(left > Duration.zero ? fmtCountdown(left, s.id) : s.liveStartingSoon, style: widget.style ?? Rave.label(size: 12, color: Rave.mustard));
+    return Text(left > Duration.zero ? fmtCountdown(left, s.id) : s.liveStartingSoon, style: widget.style ?? Rave.label(size: 12, color: context.rc.accent));
   }
 }
 
@@ -169,10 +172,10 @@ class LiveCard extends StatelessWidget {
           Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(weight: FontWeight.w700)),
           const SizedBox(height: 2),
           Row(children: [
-            Flexible(child: Text(s.artist?.name ?? s.orgName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 12.5, color: Rave.muted))),
+            Flexible(child: Text(s.artist?.name ?? s.orgName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 12.5, color: context.rc.muted))),
             if (s.scheduled && s.scheduledAt != null) ...[
-              Text(' · ', style: Rave.body(size: 12.5, color: Rave.muted)),
-              Countdown(until: s.scheduledAt!, style: Rave.body(size: 12, weight: FontWeight.w700, color: Rave.mustard)),
+              Text(' · ', style: Rave.body(size: 12.5, color: context.rc.muted)),
+              Countdown(until: s.scheduledAt!, style: Rave.body(size: 12, weight: FontWeight.w700, color: context.rc.accent)),
             ],
           ]),
         ]),
@@ -200,7 +203,11 @@ class _Tag extends StatelessWidget {
 
 /// Rak "Sedang live" di beranda — muncul hanya bila ada siaran (poll 60 dtk), seperti beranda web.
 class LiveNowShelf extends StatefulWidget {
-  const LiveNowShelf({super.key});
+  const LiveNowShelf({super.key, this.cardWidth, this.emptyText});
+  /// Lebar kartu (default 260; tab Live di beranda memakai kartu besar).
+  final double? cardWidth;
+  /// Catatan bila tidak ada yang live; null = rak disembunyikan.
+  final String? emptyText;
   @override
   State<LiveNowShelf> createState() => _LiveNowShelfState();
 }
@@ -221,19 +228,19 @@ class _LiveNowShelfState extends State<LiveNowShelf> {
       every: const Duration(seconds: 60),
       load: (app) => _streams(app, 'live', 8),
       builder: (context, list, _, _) => list == null || list.isEmpty
-          ? const SizedBox.shrink()
+          ? (list != null && widget.emptyText != null ? FilterEmptyNote(widget.emptyText!) : const SizedBox.shrink())
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SectionTitle(
                 s.liveNow,
                 action: TextButton(
                   onPressed: () => openHref(context, '/app/live'),
-                  child: Text(s.showAll.toUpperCase(), style: Rave.label(size: 11, color: Rave.muted)),
+                  child: Text(s.showAll.toUpperCase(), style: Rave.label(size: 11, color: context.rc.muted)),
                 ),
               ),
               SizedBox(
-                height: 200,
-                child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 10), children: [
-                  for (final x in list.take(6)) LiveCard(s: x, width: 260),
+                height: (widget.cardWidth ?? 260) * 9 / 16 + 64,
+                child: RaveHorizontalList(snapExtent: widget.cardWidth ?? 260, children: [
+                  for (final x in list.take(8)) LiveCard(s: x, width: widget.cardWidth ?? 260),
                 ]),
               ),
             ]),
@@ -250,7 +257,7 @@ class LiveScreen extends StatelessWidget {
     final s = app.s;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Rave.canvas,
+        backgroundColor: context.rc.canvas,
         title: Row(children: [const Icon(Icons.sensors_rounded, color: Color(0xFFEF4444)), const SizedBox(width: 8), Text('LIVE', style: Rave.poster(28))]),
       ),
       body: FutureBuilder<bool>(
@@ -261,14 +268,12 @@ class LiveScreen extends StatelessWidget {
             every: const Duration(seconds: 20),
             load: (app) => _streams(app, 'live', 24),
             builder: (context, live, err, reload) {
-              if (live == null && err != null) return ErrorState(message: err is OfflineError ? s.offline : err.toString(), retry: reload);
-              if (live == null) return const Center(child: CircularProgressIndicator(color: Rave.mustard, strokeWidth: 2.5));
+              if (live == null && err != null) return ErrorState(message: friendlyError(s, err), retry: reload);
+              if (live == null) return Center(child: CircularProgressIndicator(color: context.rc.accent, strokeWidth: 2.5));
               final top = live.isEmpty ? null : live.first;
-              return RefreshIndicator(
-                color: Rave.mustard,
-                backgroundColor: Rave.raised,
+              return RaveRefresh(
                 onRefresh: reload,
-                child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+                child: ListView(physics: raveVerticalPhysics, padding: const EdgeInsets.only(bottom: 24), children: [
                   if (top != null) _Hero(s: top) else _NobodyLive(),
                   if (live.length > 1) _Grid(title: s.liveNow, items: live.skip(1).toList()),
                   _Section(status: 'upcoming', title: s.liveUpcoming, limit: 12, every: const Duration(seconds: 60), empty: s.liveNoScheduled),
@@ -290,13 +295,13 @@ class _NobodyLive extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(24),
-      color: const Color(0x0DFFFFFF),
+      color: context.rc.isLight ? context.rc.card : const Color(0x0DFFFFFF),
       child: Column(children: [
-        const Icon(Icons.sensors_off_rounded, size: 36, color: Rave.subtle),
+        Icon(Icons.sensors_off_rounded, size: 36, color: context.rc.subtle),
         const SizedBox(height: 10),
         Text(s.liveNobody, style: Rave.body(weight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text(s.liveNobodyBody, textAlign: TextAlign.center, style: Rave.body(size: 13, color: Rave.muted)),
+        Text(s.liveNobodyBody, textAlign: TextAlign.center, style: Rave.body(size: 13, color: context.rc.muted)),
       ]),
     );
   }
@@ -324,16 +329,16 @@ class _Hero extends StatelessWidget {
             ]),
           ),
           const SizedBox(height: 12),
-          Eyebrow(t.liveNowEyebrow, color: const Color(0xFFF87171)),
+          Eyebrow(t.liveNowEyebrow, color: context.rc.isLight ? const Color(0xFFDC2626) : const Color(0xFFF87171)),
           const SizedBox(height: 4),
           Text(s.title, style: Rave.body(size: 21, weight: FontWeight.w800, height: 1.15)),
           if (s.artist != null) ...[
             const SizedBox(height: 4),
-            GestureDetector(onTap: () => openItem(context, 'artist', s.artist!.slug), child: Text(s.artist!.name, style: Rave.body(weight: FontWeight.w700, color: Rave.muted))),
+            GestureDetector(onTap: () => openItem(context, 'artist', s.artist!.slug), child: Text(s.artist!.name, style: Rave.body(weight: FontWeight.w700, color: context.rc.muted))),
           ],
           if (s.description != null) ...[
             const SizedBox(height: 6),
-            Text(s.description!, maxLines: 3, overflow: TextOverflow.ellipsis, style: Rave.body(size: 13, color: Rave.muted)),
+            Text(s.description!, maxLines: 3, overflow: TextOverflow.ellipsis, style: Rave.body(size: 13, color: context.rc.muted)),
           ],
         ]),
       ),
@@ -350,7 +355,7 @@ class _Grid extends StatelessWidget {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SectionTitle(title),
         if (items.isEmpty && empty != null)
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(empty!, style: Rave.body(size: 13, color: Rave.muted)))
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(empty!, style: Rave.body(size: 13, color: context.rc.muted)))
         else
           LayoutBuilder(builder: (context, c) {
             final cols = c.maxWidth >= 600 ? 2 : 1;
@@ -389,7 +394,9 @@ class LiveWatchScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = App.of(context);
     final t = app.s;
-    return Scaffold(
+    // Layar tonton = "bioskop": selalu gelap di kedua tema.
+    return DarkZone(
+      child: Scaffold(
       appBar: AppBar(backgroundColor: Rave.canvas, title: Text('LIVE', style: Rave.poster(26))),
       body: _Polled<LiveStream>(
         every: const Duration(seconds: 10),
@@ -398,7 +405,7 @@ class LiveWatchScreen extends StatelessWidget {
           // Galat polling sesaat tidak boleh membongkar pemutar yang sedang berjalan.
           if (s == null && err != null) {
             final notFound = err is ApiError && err.status == 404;
-            return ErrorState(message: notFound ? t.liveNotFound : (err is OfflineError ? t.offline : err.toString()), retry: reload);
+            return ErrorState(message: notFound ? t.liveNotFound : friendlyError(t, err), retry: reload);
           }
           if (s == null) return const Center(child: CircularProgressIndicator(color: Rave.mustard, strokeWidth: 2.5));
           final showChat = s.chatEnabled && s.canWatch;
@@ -432,6 +439,7 @@ class LiveWatchScreen extends StatelessWidget {
             ]);
           });
         },
+      ),
       ),
     );
   }
@@ -834,7 +842,7 @@ class _ChatState extends State<_Chat> {
         if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
       });
     } catch (e) {
-      if (mounted) toast(context, e.toString());
+      if (mounted) toastError(context, e);
     } finally {
       if (mounted) setState(() => sending = false);
     }

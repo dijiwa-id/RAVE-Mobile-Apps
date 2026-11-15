@@ -7,17 +7,24 @@ import '../screens/now_playing.dart';
 import 'common.dart';
 import 'deck.dart';
 import 'links.dart';
+import 'media.dart';
+import 'motion.dart';
 
 /// Mini-player di atas tab bar: sampul, judul, suka, putar/jeda, progres tipis. Ketuk → pemutar layar penuh,
 /// geser ke atas juga membuka. Selama jeda iklan menampilkan kartu iklan.
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
 
+  /// Jarak kotak mini-player ke tepi layar, tebal bingkai, dan padding dalam — jumlahnya = [Rave.gutter].
+  static const margin = 8.0, border = 1.0, inset = Rave.gutter - margin - border;
+
   @override
   Widget build(BuildContext context) {
     final app = App.of(context);
     final s = app.s;
-    return ListenableBuilder(
+    // Mini-player & tombol deck tetap gelap di tema terang ("pulau gelap", sama dengan web).
+    return DarkZone(
+      child: ListenableBuilder(
       listenable: Listenable.merge([app.player, app.likes]),
       builder: (context, _) {
         final p = app.player;
@@ -29,13 +36,14 @@ class MiniPlayer extends StatelessWidget {
           onTap: () => openNowPlaying(context),
           onVerticalDragEnd: (d) => (d.primaryVelocity ?? 0) < -200 ? openNowPlaying(context) : null,
           child: Container(
-            margin: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-            decoration: BoxDecoration(color: Rave.raised, border: Border.all(color: Rave.line), boxShadow: Rave.hardShadow),
+            margin: const EdgeInsets.fromLTRB(MiniPlayer.margin, 0, MiniPlayer.margin, 4),
+            decoration: BoxDecoration(color: Rave.raised, border: Border.all(color: Rave.line, width: MiniPlayer.border), boxShadow: Rave.hardShadow),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Padding(
-                padding: const EdgeInsets.all(6),
+                // margin + bingkai + padding = gutter → sampul & tombol terakhir sejajar tepi isi halaman.
+                padding: const EdgeInsets.symmetric(horizontal: MiniPlayer.inset, vertical: 2),
                 child: Row(children: [
-                  Hero(tag: 'cover', child: Cover(c.imageUrl, size: 44)),
+                  Hero(tag: 'cover', child: Cover(c.imageUrl, key: const Key('mini-cover'), size: 44)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -46,11 +54,12 @@ class MiniPlayer extends StatelessWidget {
                   if (app.api.authed && c.kind == 'track')
                     IconButton(
                       tooltip: app.likes.has(c.id) ? s.unlike : s.like,
-                      onPressed: () => app.likes.toggle(c.id, app.cache).catchError((_) {}),
-                      icon: Icon(app.likes.has(c.id) ? Icons.favorite : Icons.favorite_border, color: app.likes.has(c.id) ? Rave.mustard : Rave.paper),
+                      onPressed: () => toggleLike(context, c.id, image: c.imageUrl),
+                      icon: LikeHeart(liked: app.likes.has(c.id), color: Rave.paper),
                     ),
                   const SizedBox(width: 4),
                   DeckKey(
+                    key: const Key('mini-last'),
                     semantic: p.playing ? s.pause : s.play,
                     play: true,
                     width: 48,
@@ -60,7 +69,6 @@ class MiniPlayer extends StatelessWidget {
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Rave.ink))
                         : Icon(p.error != null ? Icons.refresh_rounded : p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                   ),
-                  const SizedBox(width: 2),
                 ]),
               ),
               StreamBuilder<Duration>(
@@ -75,6 +83,7 @@ class MiniPlayer extends StatelessWidget {
           ),
         );
       },
+    ),
     );
   }
 }
@@ -90,8 +99,8 @@ class _AdMini extends StatelessWidget {
     final left = (a.durationS - state.elapsed.inSeconds).clamp(0, 999);
     final skipIn = state.skipIn;
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.fromLTRB(MiniPlayer.margin, 0, MiniPlayer.margin, 4),
+      padding: const EdgeInsets.symmetric(horizontal: Rave.gutter - MiniPlayer.margin - 1.5, vertical: 8),
       decoration: BoxDecoration(color: Rave.plum, border: Border.all(color: Rave.mustard, width: 1.5)),
       child: Row(children: [
         Cover(a.imageUrl, size: 44),

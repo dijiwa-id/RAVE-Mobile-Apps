@@ -5,6 +5,8 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/common.dart';
+import '../widgets/motion.dart';
+import '../widgets/feedback.dart';
 import '../widgets/media.dart';
 import 'login.dart';
 
@@ -51,10 +53,11 @@ class _ArtistScreenState extends State<ArtistScreen> {
     try {
       await app.api.request<dynamic>('/v1/library/follows/${a.id}', method: was ? 'DELETE' : 'PUT');
       app.cache.invalidate('/v1/library');
+      if (mounted) showToast(context, was ? app.s.unfollowedToast(a.name) : app.s.followedToast(a.name), kind: was ? ToastKind.info : ToastKind.ok, image: a.imageUrl);
     } catch (e) {
       if (mounted) {
         setState(() => following = was);
-        toast(context, e.toString());
+        toastError(context, e);
       }
     }
   }
@@ -66,24 +69,30 @@ class _ArtistScreenState extends State<ArtistScreen> {
     return ApiView<Artist>(
       path: '/v1/catalog/artists/${Uri.encodeComponent(widget.id)}',
       parse: Artist.fromJson,
-      loading: const Scaffold(body: Center(child: CircularProgressIndicator(color: Rave.mustard))),
+      loading: const Scaffold(body: SafeArea(child: ListSkeleton())),
       builder: (context, a, _) {
         _loadFollow(a);
         final top = more ? a.topTracks : a.topTracks.take(5).toList();
         return Scaffold(
           extendBodyBehindAppBar: true,
           appBar: AppBar(
-            backgroundColor: _titled ? Rave.plum.withValues(alpha: 0.96) : Colors.transparent,
-            title: AnimatedOpacity(opacity: _titled ? 1 : 0, duration: const Duration(milliseconds: 150), child: Text(a.name, style: Rave.body(size: 16, weight: FontWeight.w700))),
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AnimatedOpacity(
+              opacity: _titled ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: ColoredBox(color: Rave.plum.withValues(alpha: 0.96), child: const SizedBox.expand()),
+            ),
+            // Header poster gig selalu gelap (kedua tema) → ikon & bilah status terang.
+            foregroundColor: Rave.paper,
+            systemOverlayStyle: Rave.overlayFor(Brightness.dark),
+            title: AnimatedOpacity(opacity: _titled ? 1 : 0, duration: const Duration(milliseconds: 150), child: Text(a.name, style: Rave.body(size: 16, weight: FontWeight.w700, color: Rave.paper))),
           ),
-          body: CustomScrollView(controller: _scroll, slivers: [
-            SliverToBoxAdapter(child: _Header(a: a)),
+          body: CustomScrollView(controller: _scroll, physics: raveVerticalPhysics, slivers: [
+            SliverToBoxAdapter(child: DarkZone(child: _Header(a: a, scroll: _scroll))),
             SliverToBoxAdapter(
               child: ListenableBuilder(
                 listenable: app.player,
                 builder: (context, _) {
-                  final p = app.player;
-                  final inThis = a.topTracks.any((t) => t.id == p.current?.id);
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                     child: Row(children: [
@@ -93,10 +102,11 @@ class _ArtistScreenState extends State<ArtistScreen> {
                         OutlineButton(label: following! ? s.following : s.follow, active: following!, onTap: () => _toggleFollow(a)),
                       const Spacer(),
                       if (a.topTracks.isNotEmpty)
-                        PlayButton(
-                          playing: inThis && p.playing,
+                        PlayFab(
+                          size: 56,
+                          playKey: 'artist:${a.slug}',
                           semantic: s.play,
-                          onTap: () => inThis ? p.toggle() : p.playQueue(a.topTracks.map(Playable.fromTrack).toList()),
+                          onPlay: () => playCollectionNow(context, a.topTracks.map(Playable.fromTrack).toList(), 'artist:${a.slug}', title: a.name, image: a.imageUrl),
                         ),
                     ]),
                   );
@@ -105,7 +115,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
             ),
             if (a.topTracks.isNotEmpty) ...[
               SliverToBoxAdapter(child: SectionTitle(s.popular)),
-              TrackSliver(tracks: top),
+              TrackSliver(tracks: top, contextKey: 'artist:${a.slug}'),
               if (a.topTracks.length > 5)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -126,7 +136,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(a.bio!, style: Rave.body(size: 14.5, color: Rave.paper.withValues(alpha: 0.85), height: 1.5)),
+                  child: Text(a.bio!, style: Rave.body(size: 14.5, color: context.rc.text.withValues(alpha: 0.85), height: 1.5)),
                 ),
               ),
             ],
@@ -140,8 +150,13 @@ class _ArtistScreenState extends State<ArtistScreen> {
 
 /// Header bergaya poster gig: foto hitam-putih kontras + tinta ungu, stiker terverifikasi, cap kota, label genre.
 class _Header extends StatelessWidget {
-  const _Header({required this.a});
+  const _Header({required this.a, this.scroll});
   final Artist a;
+  /// Paralaks foto & nama terhadap gulir halaman.
+  final ScrollController? scroll;
+  Widget _px(Widget child, {double drift = 0.5, double shrink = 0, Alignment alignment = Alignment.center}) =>
+      scroll == null ? child : Parallax(controller: scroll!, drift: drift, shrink: shrink, alignment: alignment, child: child);
+
   @override
   Widget build(BuildContext context) {
     final app = App.of(context);
@@ -152,10 +167,10 @@ class _Header extends StatelessWidget {
       child: Stack(fit: StackFit.expand, children: [
         const ColoredBox(color: Rave.purple),
         if (img != null)
-          ColorFiltered(
+          _px(ColorFiltered(
             colorFilter: const ColorFilter.matrix([0.33, 0.33, 0.33, 0, 0, 0.33, 0.33, 0.33, 0, 0, 0.33, 0.33, 0.33, 0, 0, 0, 0, 0, 1, 0]),
             child: Cover(a.coverUrl ?? a.imageUrl),
-          ),
+          )),
         const ColoredBox(color: Color(0x885B2A6E)),
         const DecoratedBox(
           decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Rave.canvas, Color(0x330E0C0F), Colors.transparent], stops: [0, 0.55, 1])),
@@ -193,7 +208,7 @@ class _Header extends StatelessWidget {
                 ),
             ]),
             const SizedBox(height: 10),
-            Text(a.name.toUpperCase(), style: Rave.poster(a.name.length > 14 ? 48 : 64)),
+            _px(Text(a.name.toUpperCase(), style: Rave.poster(a.name.length > 14 ? 48 : 64)), drift: 0.12, shrink: 0.2, alignment: Alignment.bottomLeft),
             const SizedBox(height: 6),
             Text('${s.listeners(fmtCompact(a.monthlyListeners, app.settings.locale))} · ${s.followers(fmtCompact(a.followers, app.settings.locale))}',
                 style: Rave.body(size: 13, color: Rave.paper.withValues(alpha: 0.85))),

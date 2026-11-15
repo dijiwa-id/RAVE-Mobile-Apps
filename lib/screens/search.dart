@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
-import '../player/player.dart';
 import '../widgets/common.dart';
+import '../widgets/motion.dart';
 import '../widgets/media.dart';
 import 'browse.dart';
 import 'routes.dart';
@@ -57,7 +57,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 style: Rave.body(size: 15, weight: FontWeight.w600, color: Rave.ink),
                 decoration: InputDecoration(
                   hintText: s.searchHint,
-                  fillColor: Rave.paper,
+                  fillColor: context.rc.isLight ? Colors.white : Rave.paper,
                   hintStyle: Rave.body(size: 15, color: const Color(0xFF6B6570)),
                   prefixIcon: const Icon(Icons.search_rounded, color: Rave.ink),
                   suffixIcon: q.isEmpty
@@ -94,7 +94,7 @@ class _Results extends StatelessWidget {
       builder: (context, r, _) {
         if (r.isEmpty) return ListView(children: [EmptyState(s.noResults(q))]);
         final top = r.artists.isNotEmpty ? r.artists.first : null;
-        return CustomScrollView(slivers: [
+        return CustomScrollView(physics: raveVerticalPhysics, slivers: [
           if (top != null)
             SliverToBoxAdapter(
               child: InkWell(
@@ -102,24 +102,24 @@ class _Results extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: Row(children: [
-                    Cover(top.imageUrl, size: 72, round: true),
+                    Container(
+                      decoration: BoxDecoration(border: Border.all(color: Rave.ink, width: 2), boxShadow: context.rc.hard()),
+                      child: Cover(top.imageUrl, size: 72),
+                    ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Eyebrow(s.topResult, color: Rave.mustard),
+                        Eyebrow(s.topResult, color: context.rc.accent),
                         const SizedBox(height: 4),
                         Text(top.name.toUpperCase(), style: Rave.poster(28)),
-                        Text(s.kind('artist'), style: Rave.body(size: 13, color: Rave.muted)),
+                        Text(s.kind('artist'), style: Rave.body(size: 13, color: context.rc.muted)),
                       ]),
                     ),
-                    PlayButton(
-                      size: 44,
-                      playing: false,
+                    PlayFab(
+                      size: 48,
+                      playKey: 'artist:${top.slug}',
                       semantic: s.play,
-                      onTap: () {
-                        final mine = r.tracks.where((t) => t.artist.id == top.id).map(Playable.fromTrack).toList();
-                        mine.isNotEmpty ? app.player.playQueue(mine) : playCollection(context, 'artist', top.slug);
-                      },
+                      onPlay: () => playMedia(context, 'artist', top.slug),
                     ),
                   ]),
                 ),
@@ -131,7 +131,7 @@ class _Results extends StatelessWidget {
           ],
           if (r.artists.length > 1)
             SliverToBoxAdapter(
-              child: Shelf(title: s.artists, height: 196, children: [
+              child: Shelf(title: s.artists, children: [
                 for (final a in r.artists) MediaCard(item: MediaItem(id: a.slug, kind: 'artist', title: a.name, subtitle: s.kind('artist'), href: '/app/artist/${a.slug}', imageUrl: a.imageUrl)),
               ]),
             ),

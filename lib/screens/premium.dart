@@ -4,6 +4,8 @@ import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import '../widgets/motion.dart';
+import '../widgets/feedback.dart';
 import 'login.dart';
 
 /// Premium: paket & harga dari konfigurasi platform (`subscription.*`, sama dengan halaman web /premium),
@@ -28,9 +30,11 @@ class PremiumScreen extends StatelessWidget {
             (name: s.planStudent, who: s.planStudentWho, price: price('student', 24900), items: [s.allBenefits, s.studentVerify], popular: false),
             (name: s.planDuo, who: s.planDuoWho, price: price('duo', 64900), items: [s.allBenefits, s.twoAccounts], popular: false),
           ];
-          return CustomScrollView(slivers: [
+          return CustomScrollView(physics: raveVerticalPhysics, slivers: [
             SliverToBoxAdapter(
-              child: Container(
+              // Hero ungu = "pulau gelap" di kedua tema.
+              child: DarkZone(
+                child: Container(
                 padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 18, 20, 26),
                 decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Rave.purple, Rave.plum, Rave.canvas], stops: [0, 0.55, 1])),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -64,6 +68,7 @@ class PremiumScreen extends StatelessWidget {
                   Text(s.premiumNote(trial), style: Rave.label(size: 9.5, color: Rave.paper.withValues(alpha: 0.6))),
                 ]),
               ),
+              ),
             ),
             SliverToBoxAdapter(child: SectionTitle(s.plansTitle)),
             SliverList.builder(
@@ -75,9 +80,9 @@ class PremiumScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Rave.raised,
-                      border: Border.all(color: pl.popular ? Rave.mustard : Rave.line, width: pl.popular ? 2 : 1),
-                      boxShadow: pl.popular ? Rave.hardShadow : null,
+                      color: context.rc.raised,
+                      border: Border.all(color: pl.popular ? Rave.mustard : context.rc.line, width: pl.popular ? 2 : 1),
+                      boxShadow: pl.popular ? context.rc.hard() : null,
                     ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
@@ -89,18 +94,18 @@ class PremiumScreen extends StatelessWidget {
                             child: Text(s.mostPopular.toUpperCase(), style: Rave.label(size: 9, color: Rave.ink)),
                           ),
                       ]),
-                      Text(pl.who, style: Rave.body(size: 13, color: Rave.muted)),
+                      Text(pl.who, style: Rave.body(size: 13, color: context.rc.muted)),
                       const SizedBox(height: 10),
                       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                        Text('Rp ${_idr(pl.price)}', style: Rave.poster(34, color: Rave.mustard)),
-                        Padding(padding: const EdgeInsets.only(bottom: 4, left: 4), child: Text(s.perMonth, style: Rave.body(size: 13, color: Rave.muted))),
+                        Text('Rp ${_idr(pl.price)}', style: Rave.poster(34, color: context.rc.accent)),
+                        Padding(padding: const EdgeInsets.only(bottom: 4, left: 4), child: Text(s.perMonth, style: Rave.body(size: 13, color: context.rc.muted))),
                       ]),
                       const SizedBox(height: 10),
                       for (final it in pl.items)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 3),
                           child: Row(children: [
-                            const Icon(Icons.check_rounded, size: 18, color: Rave.mustard),
+                            Icon(Icons.check_rounded, size: 18, color: context.rc.accent),
                             const SizedBox(width: 8),
                             Expanded(child: Text(it, style: Rave.body(size: 14))),
                           ]),
@@ -121,7 +126,7 @@ class PremiumScreen extends StatelessWidget {
                     TableRow(children: [
                       const SizedBox(),
                       Center(child: Eyebrow(s.free.split(' ').first, size: 9.5)),
-                      Center(child: Eyebrow('Premium', color: Rave.mustard, size: 9.5)),
+                      Center(child: Eyebrow('Premium', color: context.rc.accent, size: 9.5)),
                     ]),
                     for (final (f, free) in [
                       (s.cmpOnDemand, true),
@@ -133,11 +138,11 @@ class PremiumScreen extends StatelessWidget {
                       (s.cmpNoAds, false),
                     ])
                       TableRow(
-                        decoration: const BoxDecoration(border: Border(top: BorderSide(color: Rave.line))),
+                        decoration: BoxDecoration(border: Border(top: BorderSide(color: context.rc.line))),
                         children: [
                           Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(f, style: Rave.body(size: 14))),
-                          Center(child: Icon(free ? Icons.check_rounded : Icons.remove_rounded, color: free ? Rave.paper : Rave.subtle, size: 20)),
-                          const Center(child: Icon(Icons.check_rounded, color: Rave.mustard, size: 22)),
+                          Center(child: Icon(free ? Icons.check_rounded : Icons.remove_rounded, color: free ? context.rc.text : context.rc.subtle, size: 20)),
+                          Center(child: Icon(Icons.check_rounded, color: context.rc.accent, size: 22)),
                         ],
                       ),
                   ],
@@ -147,7 +152,7 @@ class PremiumScreen extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
-                child: Text(s.offlineSoonNote, style: Rave.body(size: 13, color: Rave.muted)),
+                child: Text(s.offlineSoonNote, style: Rave.body(size: 13, color: context.rc.muted)),
               ),
             ),
           ]);
@@ -200,7 +205,7 @@ class _NotifyButtonState extends State<_NotifyButton> {
           await app.api.post('/v1/waitlist', {'email': u.email, 'name': u.displayName, 'segment': 'fan', 'consent_marketing': false});
           if (mounted) setState(() => done = true);
         } catch (e) {
-          if (context.mounted) toast(context, e.toString());
+          if (context.mounted) toastError(context, e);
         } finally {
           if (mounted) setState(() => busy = false);
         }

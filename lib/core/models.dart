@@ -9,7 +9,9 @@ class Me {
   final String? avatarUrl, locale;
   final bool premium, onboarded;
   final String? city;
-  const Me({required this.id, required this.email, required this.displayName, this.avatarUrl, this.locale, this.premium = false, this.onboarded = true, this.city});
+  /// Tema aplikasi dengar tersimpan di akun: `light` · `dark` · `system` · null (ikut default platform).
+  final String? theme;
+  const Me({required this.id, required this.email, required this.displayName, this.avatarUrl, this.locale, this.premium = false, this.onboarded = true, this.city, this.theme});
   factory Me.fromJson(Json j) => Me(
         id: j['id'],
         email: j['email'] ?? '',
@@ -19,8 +21,11 @@ class Me {
         premium: j['premium'] == true,
         onboarded: j['onboarded'] != false,
         city: j['city'],
+        theme: j['theme'] as String?,
       );
-  Json toJson() => {'id': id, 'email': email, 'display_name': displayName, 'avatar_url': avatarUrl, 'locale': locale, 'premium': premium, 'onboarded': onboarded, 'city': city};
+  Json toJson() => {'id': id, 'email': email, 'display_name': displayName, 'avatar_url': avatarUrl, 'locale': locale, 'premium': premium, 'onboarded': onboarded, 'city': city, 'theme': theme};
+
+  Me withTheme(String? t) => Me(id: id, email: email, displayName: displayName, avatarUrl: avatarUrl, locale: locale, premium: premium, onboarded: onboarded, city: city, theme: t);
 }
 
 class ArtistRef {
@@ -263,7 +268,21 @@ class PlaybackSession {
   final bool previewOnly;
   final int? previewMs;
   final int durationMs;
-  const PlaybackSession({required this.sessionId, required this.streamUrl, required this.codecLabel, this.qualityCapped, this.previewOnly = false, this.previewMs, this.durationMs = 0});
+  /// Koreksi loudness per lagu dari server (dB) untuk normalisasi volume.
+  final double? loudnessGainDb;
+  /// Lossless diminta tetapi versi FLAC sedang disiapkan (diputar AAC 320 sementara).
+  final bool losslessPending;
+  const PlaybackSession({
+    required this.sessionId,
+    required this.streamUrl,
+    required this.codecLabel,
+    this.qualityCapped,
+    this.previewOnly = false,
+    this.previewMs,
+    this.durationMs = 0,
+    this.loudnessGainDb,
+    this.losslessPending = false,
+  });
   factory PlaybackSession.fromJson(Json j) => PlaybackSession(
         sessionId: j['session_id'],
         streamUrl: j['stream_url'],
@@ -272,6 +291,8 @@ class PlaybackSession {
         previewOnly: j['preview_only'] == true,
         previewMs: (j['preview_ms'] as num?)?.toInt(),
         durationMs: (j['duration_ms'] as num?)?.toInt() ?? 0,
+        loudnessGainDb: (j['loudness_gain_db'] as num?)?.toDouble(),
+        losslessPending: j['lossless_pending'] == true,
       );
 }
 

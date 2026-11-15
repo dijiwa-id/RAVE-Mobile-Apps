@@ -26,15 +26,33 @@ Color? parseHex(String? hex) {
   return v == null ? null : Color(v);
 }
 
-/// Pengaturan publik platform (modul aktif) — `GET /v1/platform/config`, di-cache 5 menit lewat DataCache.
-Future<bool> platformFlag(AppState app, String key, {bool fallback = true}) async {
+/// Pengaturan publik platform (modul aktif, kebijakan kualitas) — `GET /v1/platform/config` (`settings`),
+/// di-cache lewat DataCache. Galat → map kosong (pemanggil memakai nilai bawaan).
+Future<Json> platformSettings(AppState app) async {
   try {
     final j = await app.cache.load('cfg:platform', () async => await app.api.get('/v1/platform/config') as Object) as Json;
-    final v = (j['settings'] as Json?)?[key];
-    return v is bool ? v : fallback;
+    return (j['settings'] as Json?) ?? const {};
   } catch (_) {
-    return fallback;
+    return const {};
   }
+}
+
+/// Perbarui kebijakan tema platform (`appearance.player_theme`, `appearance.allow_user_theme`) — disimpan di
+/// perangkat agar start berikutnya (juga offline) langsung memakai tema yang benar.
+Future<void> refreshAppearance(AppState app) async {
+  final cfg = await platformSettings(app);
+  if (cfg.isEmpty) return;
+  final t = cfg['appearance.player_theme'];
+  final allow = cfg['appearance.allow_user_theme'];
+  await app.settings.setPlatformAppearance(
+    theme: t is String && const ['dark', 'light', 'system'].contains(t) ? t : 'dark',
+    allowUser: allow is bool ? allow : true,
+  );
+}
+
+Future<bool> platformFlag(AppState app, String key, {bool fallback = true}) async {
+  final v = (await platformSettings(app))[key];
+  return v is bool ? v : fallback;
 }
 
 /// Buka `href` aplikasi web (`/app/...`) di layar asli aplikasi — satu pemetaan untuk kategori, kartu, dsb.
@@ -146,7 +164,7 @@ class _Tile extends StatelessWidget {
                 const Positioned(right: 10, bottom: 8, child: Icon(Icons.sensors_rounded, size: 46, color: Color(0xCCFFFFFF))),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 64, 10),
-                child: Text(c.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: Rave.body(size: 16.5, weight: FontWeight.w800, height: 1.1)),
+                child: Text(c.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: Rave.body(size: 16.5, weight: FontWeight.w800, height: 1.1, color: Rave.paper)),
               ),
             ]),
           ),
@@ -174,18 +192,21 @@ class GenreScreen extends StatelessWidget {
               pinned: true,
               expandedHeight: 190,
               backgroundColor: Color.lerp(color, Rave.canvas, 0.35),
+              // Header berwarna kategori: teks & ikon terang di kedua tema.
+              foregroundColor: Rave.paper,
+              systemOverlayStyle: Rave.overlayFor(Brightness.dark),
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding: const EdgeInsetsDirectional.only(start: 56, bottom: 14, end: 16),
-                title: Text(d.name.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.poster(30)),
+                title: Text(d.name.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.poster(30, color: Rave.paper)),
                 background: DecoratedBox(
-                  decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [color, Rave.canvas])),
+                  decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [color, context.rc.isLight ? Color.lerp(color, Rave.canvas, 0.45)! : Rave.canvas])),
                 ),
               ),
             ),
             SliverToBoxAdapter(child: _TaggedPlaylists(tag: id)),
             if (d.artists.isNotEmpty)
               SliverToBoxAdapter(
-                child: Shelf(title: s.artists, height: 196, children: [
+                child: Shelf(title: s.artists, children: [
                   for (final a in d.artists)
                     MediaCard(item: MediaItem(id: a.slug, kind: 'artist', title: a.name, subtitle: a.city ?? s.kind('artist'), href: '/app/artist/${a.slug}', imageUrl: a.imageUrl)),
                 ]),
@@ -261,7 +282,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   Widget build(BuildContext context) {
     final s = App.of(context).s;
     return Scaffold(
-      appBar: AppBar(title: Text((fiction ? s.storiesTab : s.podcasts).toUpperCase(), style: Rave.poster(26)), backgroundColor: Rave.canvas),
+      appBar: AppBar(title: Text((fiction ? s.storiesTab : s.podcasts).toUpperCase(), style: Rave.poster(26)), backgroundColor: context.rc.canvas),
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),

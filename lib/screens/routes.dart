@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'album.dart';
@@ -9,7 +11,7 @@ import 'show.dart';
 import 'settings.dart';
 import '../core/app_state.dart';
 import '../player/player.dart';
-import '../widgets/common.dart';
+import '../widgets/feedback.dart';
 
 /// Buka halaman detail di navigator tab yang aktif (riwayat per tab, seperti aplikasi musik).
 void openItem(BuildContext context, String kind, String id) {
@@ -33,18 +35,25 @@ void openItem(BuildContext context, String kind, String id) {
   playablesOf(app, kind, id).then((items) {
     if (items.isNotEmpty) app.player.playQueue(items);
   }).catchError((Object e) {
-    if (context.mounted) toast(context, e.toString());
+    if (context.mounted) toastError(context, e);
   });
 }
 
-/// Putar koleksi (album/artis/playlist) dari kartu tanpa membukanya.
-Future<void> playCollection(BuildContext context, String kind, String id) async {
+/// Putar item media dari kartu tanpa membukanya (web `usePlayMedia`): rilis → semua lagu, artis → lagu populer,
+/// playlist → isinya, episode → episode itu. Antrean diberi konteks `<kind>:<id>`; bila antrean sudah berasal dari
+/// item yang sama, ketukan menjeda/melanjutkan (tidak mengulang). Mulai koleksi → stiker "Pita berputar".
+Future<void> playMedia(BuildContext context, String kind, String id) async {
   final app = App.read(context);
+  final p = app.player;
+  final key = '$kind:$id';
+  if (p.isActive(key)) return p.toggle();
   try {
-    final items = await playablesOf(app, kind, id);
-    if (items.isNotEmpty) await app.player.playQueue(items);
+    final m = await mediaOf(app, kind, id);
+    if (m.items.isEmpty) return;
+    unawaited(p.playQueue(m.items, 0, kind == 'episode' ? null : key));
+    if (context.mounted && kind != 'episode') showToast(context, m.title, title: app.s.nowSpinning, image: m.image, kind: ToastKind.ok, duration: const Duration(milliseconds: 2600));
   } catch (e) {
-    if (context.mounted) toast(context, e.toString());
+    if (context.mounted) toastError(context, e);
   }
 }
 

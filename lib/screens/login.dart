@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../core/api.dart';
 import '../core/app_state.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 
 /// Buka layar Masuk/Daftar (aplikasi tetap bisa dipakai sebagai tamu). Mengembalikan true bila berhasil masuk.
-Future<bool> openLogin(BuildContext context) async {
+/// [signUp]: buka dalam mode Daftar (judul berbeda; alurnya sama — OTP membuat akun baru otomatis).
+Future<bool> openLogin(BuildContext context, {bool signUp = false}) async {
   final ok = await Navigator.of(context, rootNavigator: true).push<bool>(
-    MaterialPageRoute(fullscreenDialog: true, builder: (_) => const LoginScreen()),
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => LoginScreen(signUp: signUp)),
   );
   return ok == true;
 }
@@ -27,7 +27,7 @@ Future<bool> requireLogin(BuildContext context) async {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(s.guestTitle.toUpperCase(), style: Rave.poster(30)),
           const SizedBox(height: 8),
-          Text(s.guestBody, style: Rave.body(color: Rave.muted)),
+          Text(s.guestBody, style: Rave.body(color: context.rc.muted)),
           const SizedBox(height: 20),
           PrimaryButton(label: s.signInOrUp, onTap: () => Navigator.pop(sheet, 'login')),
         ]),
@@ -40,7 +40,8 @@ Future<bool> requireLogin(BuildContext context) async {
 
 /// Masuk / Daftar dengan OTP email (IAM RAVE hanya OTP — akun baru dibuat otomatis saat kode diverifikasi).
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.signUp = false});
+  final bool signUp;
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -65,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _dev = await app.api.sendOtp(_email.text);
       setState(() => _codeStep = true);
     } catch (e) {
-      setState(() => _err = e is OfflineError ? app.s.offline : e.toString());
+      setState(() => _err = friendlyError(app.s, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -83,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await syncOnboarding(app);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      setState(() => _err = e is OfflineError ? app.s.offline : e.toString());
+      setState(() => _err = friendlyError(app.s, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -98,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(leading: IconButton(tooltip: MaterialLocalizations.of(context).closeButtonTooltip, icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context, false))),
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), children: [
-          Image.asset('assets/brand/rave-logo.webp', height: 36, alignment: Alignment.centerLeft),
+          Image.asset(context.rc.isLight ? 'assets/brand/rave-logo-dark.webp' : 'assets/brand/rave-logo.webp', height: 36, alignment: Alignment.centerLeft),
           const SizedBox(height: 28),
           Transform.rotate(
             angle: -0.06,
@@ -107,15 +108,15 @@ class _LoginScreenState extends State<LoginScreen> {
               alignment: Alignment.centerLeft,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.paper, width: 2), boxShadow: Rave.hardShadow),
+                decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: context.rc.isLight ? Rave.ink : Rave.paper, width: 2), boxShadow: context.rc.hard()),
                 child: Text('DIY · INDIE · LIVE', style: Rave.label(size: 10, color: Rave.ink)),
               ),
             ),
           ),
           const SizedBox(height: 18),
-          Text(s.authTitle.toUpperCase(), style: Rave.poster(44)),
+          Text((widget.signUp ? s.signUpTitle : s.authTitle).toUpperCase(), style: Rave.poster(44)),
           const SizedBox(height: 8),
-          Text(s.authBody, style: Rave.body(color: Rave.muted)),
+          Text(s.authBody, style: Rave.body(color: context.rc.muted)),
           const SizedBox(height: 28),
           if (!_codeStep) ...[
             Eyebrow(s.email),
@@ -134,8 +135,8 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
             PrimaryButton(label: s.sendCode, busy: _busy, onTap: emailOk ? _send : null),
           ] else ...[
-            Text(s.codeSent(_email.text.trim()), style: Rave.body(color: Rave.muted)),
-            if (_dev != null) Padding(padding: const EdgeInsets.only(top: 6), child: Eyebrow(s.devCode(_dev!), color: Rave.mustard)),
+            Text(s.codeSent(_email.text.trim()), style: Rave.body(color: context.rc.muted)),
+            if (_dev != null) Padding(padding: const EdgeInsets.only(top: 6), child: Eyebrow(s.devCode(_dev!), color: context.rc.accent)),
             const SizedBox(height: 14),
             TextField(
               controller: _code,
@@ -155,8 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
             PrimaryButton(label: s.signIn, busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              TextButton(onPressed: () => setState(() => (_codeStep = false, _code.text = '', _err = null)), child: Text(s.changeEmail, style: Rave.body(color: Rave.muted))),
-              TextButton(onPressed: _busy ? null : _send, child: Text(s.resend, style: Rave.body(color: Rave.muted))),
+              TextButton(onPressed: () => setState(() => (_codeStep = false, _code.text = '', _err = null)), child: Text(s.changeEmail, style: Rave.body(color: context.rc.muted))),
+              TextButton(onPressed: _busy ? null : _send, child: Text(s.resend, style: Rave.body(color: context.rc.muted))),
             ]),
           ],
           if (_err != null)
@@ -168,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           const SizedBox(height: 24),
           const SizedBox(height: 8),
-          Center(child: Text('${s.server}: ${app.settings.server.replaceFirst(RegExp(r'^https?://'), '')}', style: Rave.label(size: 9.5, color: Rave.subtle))),
+          Center(child: Text('${s.server}: ${app.settings.server.replaceFirst(RegExp(r'^https?://'), '')}', style: Rave.label(size: 9.5, color: context.rc.subtle))),
         ]),
       ),
     );

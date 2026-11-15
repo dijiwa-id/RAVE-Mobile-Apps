@@ -11,6 +11,7 @@ import '../core/api.dart';
 import '../core/i18n.dart';
 import '../core/models.dart' hide MediaItem;
 import '../core/settings.dart';
+import 'audio_fx.dart';
 
 /// Item yang bisa diputar: lagu atau episode podcast.
 class Playable {
@@ -70,11 +71,131 @@ class AdState {
 /// pemulihan stream, pratinjau 30 dtk, dan jeda iklan tier Gratis — perilaku sama dengan web (stores/player.ts).
 /// Kontrol latar belakang (notifikasi, layar kunci, headset) lewat audio_service.
 class Player extends ChangeNotifier {
-  Player(this.api, this.settings);
+  Player(this.api, this.settings) {
+    audio = _newAudio(withFx: _fxPlatform && !settings.fxUnsupported);
+  }
   final Api api;
   final Settings settings;
-  final audio = AudioPlayer();
+
+  /// Pemutar utama. Bukan `final`: bila efek audio (equalizer/loudness) gagal dibuat di perangkat, pemutar
+  /// dibuat ulang tanpa efek (lihat [_dropFx]) — pemutaran tidak boleh rusak karena equalizer.
+  late AudioPlayer audio;
   final _adAudio = AudioPlayer();
+  final _subs = <StreamSubscription<dynamic>>[];
+
+  // ---- Efek audio Android (AudioPipeline harus dipasang saat AudioPlayer dibuat) ----
+  static bool get _fxPlatform => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  AndroidEqualizer? _eq;
+  AndroidLoudnessEnhancer? _loud;
+  AndroidEqualizerParameters? _eqParams;
+  String _fxApplied = '';
+
+  /// Equalizer bisa dipakai di perangkat ini (Android + efek berhasil dibuat).
+  bool get eqSupported => _eq != null;
+
+  /// Parameter pita equalizer perangkat (null sampai pemutar aktif pertama kali).
+  AndroidEqualizerParameters? get eqParams => _eqParams;
+
+  AudioPlayer _newAudio({required bool withFx}) {
+    _eq = null;
+    _loud = null;
+    _eqParams = null;
+    _fxApplied = '';
+    if (!withFx) return AudioPlayer();
+    try {
+      final eq = AndroidEqualizer(), loud = AndroidLoudnessEnhancer();
+      final p = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [loud, eq]));
+      _eq = eq;
+      _loud = loud;
+      // Pita perangkat baru diketahui setelah pemutar native aktif (lagu pertama dimuat).
+      eq.parameters.then((params) {
+        if (!identical(_eq, eq)) return;
+        _eqParams = params;
+        _fxApplied = '';
+        unawaited(syncFx());
+        notifyListeners();
+      }, onError: (Object _) {});
+      return p;
+    } catch (_) {
+      _eq = null;
+      _loud = null;
+      return AudioPlayer();
+    }
+  }
+
+  /// Efek gagal di perangkat: buang pemutar ber-efek, pasang pemutar polos, ingat agar tidak dicoba lagi.
+  Future<void> _dropFx() async {
+    final old = audio;
+    for (final s in _subs) {
+      await s.cancel();
+    }
+    _subs.clear();
+    audio = _newAudio(withFx: false);
+    _wire();
+    unawaited(settings.setBool('fxUnsupported', true));
+    try {
+      await old.dispose();
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  /// Muat URL; bila gagal karena efek audio Android, ulangi sekali dengan pemutar tanpa efek.
+  Future<void> _setUrl(String url, Duration resume) async {
+    try {
+      await audio.setUrl(url, initialPosition: resume);
+    } catch (e) {
+      if ((_eq == null && _loud == null) || !looksLikeFxError(e)) rethrow;
+      await _dropFx();
+      await _applyLoudness();
+      await audio.setUrl(url, initialPosition: resume);
+    }
+  }
+
+  /// Terapkan equalizer (khusus Premium; dilewati untuk akun Gratis) — tidak pernah melempar galat.
+  Future<void> syncFx() async {
+    final eq = _eq;
+    if (eq == null) return;
+    final on = settings.eqOn && (api.user?.premium ?? false);
+    final params = _eqParams;
+    final gains = params == null ? const <double>[] : eqGainsFor(params);
+    final sig = '$on|${gains.join(',')}';
+    if (sig == _fxApplied) return;
+    _fxApplied = sig;
+    try {
+      if (on && params != null) {
+        for (var i = 0; i < params.bands.length && i < gains.length; i++) {
+          await params.bands[i].setGain(gains[i]);
+        }
+      }
+      await eq.setEnabled(on && params != null);
+    } catch (_) {
+      // efek ditolak perangkat → biarkan dilewati, pemutaran tetap jalan
+    }
+  }
+
+  /// Gain per pita perangkat: kurva kustom tersimpan (bila jumlah pita cocok) atau preset yang dipetakan.
+  List<double> eqGainsFor(AndroidEqualizerParameters p) {
+    final saved = settings.eqGains;
+    if (settings.eqPreset == 'custom' && saved.length == p.bands.length) {
+      return [for (final g in saved) g.clamp(p.minDecibels, p.maxDecibels).toDouble()];
+    }
+    return mapCurve(eqPresets[settings.eqPreset] ?? eqPresets['flat']!, [for (final b in p.bands) b.centerFrequency], p.minDecibels, p.maxDecibels);
+  }
+
+  /// Normalisasi volume: gain negatif → volume pemutar diperkecil; positif → LoudnessEnhancer (bila tersedia).
+  Future<void> _applyLoudness() async {
+    final g = settings.normalizeVolume ? normalizeGain(session?.loudnessGainDb) : 0.0;
+    final loud = _loud;
+    try {
+      await audio.setVolume(volumeForGain(g));
+    } catch (_) {}
+    if (loud == null) return;
+    try {
+      final boost = g > 0 ? g : 0.0;
+      await loud.setTargetGain(boost);
+      await loud.setEnabled(boost > 0);
+    } catch (_) {}
+  }
   late final _Handler _handler;
   S get _s => S.of(settings.locale);
 
@@ -87,6 +208,23 @@ class Player extends ChangeNotifier {
   LoopMode repeat = LoopMode.off;
   String? error;
   AdState? ad;
+
+  /// Asal antrean (sama dengan web `PlayerState.context`): `release:<id>` · `playlist:<id>` · `artist:<id>` ·
+  /// `liked` · `show:<id>`. Tombol putar sebuah koleksi menjadi Jeda bila antrean berasal darinya.
+  String? context;
+
+  /// Kunci [key] sedang aktif: `track:`/`episode:` = item itu yang dimuat; selain itu = asal antrean.
+  bool isActive(String? key) => keyActive(key, current?.id, context);
+
+  /// Logika [isActive] tanpa status pemutar (mudah diuji).
+  static bool keyActive(String? key, String? currentId, String? context) {
+    if (key == null || currentId == null) return false;
+    if (key.startsWith('track:') || key.startsWith('episode:')) return currentId == key.substring(key.indexOf(':') + 1);
+    return context == key;
+  }
+
+  /// Aktif dan sedang berbunyi (atau memuat) → tombol menampilkan Jeda.
+  bool isPlayingKey(String? key) => isActive(key) && (playing || buffering) && error == null;
   bool _adBusy = false;
 
   bool get playing => audio.playing;
@@ -101,6 +239,7 @@ class Player extends ChangeNotifier {
   int _recoveries = 0;
   bool _premiumNotified = false;
   final _messages = StreamController<String>.broadcast();
+  final _losslessNotified = <String>{};
 
   /// Pesan singkat untuk ditampilkan UI (snackbar).
   Stream<String> get messages => _messages.stream;
@@ -124,20 +263,39 @@ class Player extends ChangeNotifier {
         androidStopForegroundOnPause: true,
       ),
     );
-    audio.playerStateStream.listen((st) {
-      final b = st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering;
-      if (b != buffering) buffering = b;
-      if (st.processingState == ProcessingState.completed) unawaited(_onCompleted());
-      _publishState();
-      notifyListeners();
+    _wire();
+    // Equalizer mengikuti status Premium & preferensi; normalisasi mengikuti preferensi.
+    var lastNormalize = settings.normalizeVolume;
+    settings.addListener(() {
+      unawaited(syncFx());
+      if (settings.normalizeVolume != lastNormalize) {
+        lastNormalize = settings.normalizeVolume;
+        unawaited(_applyLoudness());
+      }
     });
-    audio.positionStream.listen(_onPosition);
-    audio.playbackEventStream.listen((_) {}, onError: (Object e, StackTrace _) => _onStreamError());
+    api.addListener(() {
+      unawaited(syncFx());
+      // Turun ke Gratis / keluar → pilihan kualitas Premium yang tersimpan dikembalikan ke auto.
+      if (api.authed) unawaited(settings.enforceFreeQuality(premium: api.user?.premium ?? false));
+    });
     // Telepon masuk / headset dicabut → jeda (praktik aplikasi musik).
     session.becomingNoisyEventStream.listen((_) => audio.pause());
     session.interruptionEventStream.listen((e) {
       if (e.begin) audio.pause();
     });
+  }
+
+  /// Langganan stream pemutar utama (diulang bila pemutar dibuat ulang tanpa efek).
+  void _wire() {
+    _subs.add(audio.playerStateStream.listen((st) {
+      final b = st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering;
+      if (b != buffering) buffering = b;
+      if (st.processingState == ProcessingState.completed) unawaited(_onCompleted());
+      _publishState();
+      notifyListeners();
+    }));
+    _subs.add(audio.positionStream.listen(_onPosition));
+    _subs.add(audio.playbackEventStream.listen((_) {}, onError: (Object e, StackTrace _) => _onStreamError()));
   }
 
   void _onPosition(Duration p) {
@@ -220,7 +378,7 @@ class Player extends ChangeNotifier {
     notifyListeners();
     _publishItem();
     try {
-      final j = await api.post('/v1/playback/sessions', {item.kind == 'track' ? 'track_id' : 'episode_id': item.id, 'quality': settings.requestQuality}) as Json;
+      final j = await api.post('/v1/playback/sessions', {item.kind == 'track' ? 'track_id' : 'episode_id': item.id, 'quality': settings.requestQualityFor(premium: api.user?.premium ?? false)}) as Json;
       if (current?.id != item.id) return;
       session = PlaybackSession.fromJson(j);
       final cap = session!.qualityCapped;
@@ -228,7 +386,11 @@ class Player extends ChangeNotifier {
         _premiumNotified = true;
         _messages.add(cap == 'premium' ? _s.premiumQuality : cap == 'disabled' ? _s.qualityDisabled : _s.qualityUnavailable);
       }
-      await audio.setUrl(api.media(session!.streamUrl)!, initialPosition: resume);
+      // Lossless diminta tetapi FLAC sedang disiapkan server → beri tahu sekali per lagu.
+      if (session!.losslessPending && _losslessNotified.add(item.id)) _messages.add(_s.losslessPending);
+      await _applyLoudness();
+      if (current?.id != item.id) return;
+      await _setUrl(api.media(session!.streamUrl)!, resume);
       _publishItem();
       unawaited(audio.play());
       if (fresh) _queueEvent('start');
@@ -322,7 +484,7 @@ class Player extends ChangeNotifier {
     if (a.type == 'audio' && a.audioUrl != null) {
       try {
         await _adAudio.setUrl(api.media(a.audioUrl)!);
-        await _adAudio.setVolume(audio.volume);
+        await _adAudio.setVolume(1.0);
         sub = _adAudio.playerStateStream.listen((s) {
           if (s.processingState == ProcessingState.completed && !(_adDone?.isCompleted ?? true)) {
             _adEvent(a, 'complete');
@@ -364,16 +526,19 @@ class Player extends ChangeNotifier {
   }
 
   // ---- API publik untuk UI ----
-  Future<void> playQueue(List<Playable> items, [int start = 0]) async {
+  /// [context]: asal antrean (lihat [context]); null = antrean lepas (mis. hasil pencarian).
+  Future<void> playQueue(List<Playable> items, [int start = 0, String? context]) async {
     if (items.isEmpty) return;
     queue = List.of(items);
     index = start;
+    this.context = context;
     _publishQueue();
     if (_adBusy) return;
     await _load(items[start]);
   }
 
   Future<void> playOne(Playable item) async {
+    context = null;
     queue = [...queue.take(index + 1), item, ...queue.skip(index + 1)];
     index = index + 1;
     _publishQueue();
@@ -447,6 +612,7 @@ class Player extends ChangeNotifier {
     await audio.stop();
     queue = [];
     index = -1;
+    context = null;
     current = null;
     session = null;
     error = null;

@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import '../core/app_state.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
-import '../screens/routes.dart';
 import 'common.dart';
+import 'feedback.dart';
+import 'motion.dart';
 
 /// Ganti server dengan aman: server lain = akun & data lain → event putar dikirim dulu, sesi ditutup, cache dibuang
 /// (token tidak boleh terkirim ke server yang salah).
@@ -107,7 +108,9 @@ class _ConnectionBannerState extends State<ConnectionBanner> {
     final s = _app.s;
     final current = _app.settings.server;
     final others = serverPresets.where((p) => p.$2 != current).toList();
-    return Material(
+    // Pita peringatan gelap (di atas mini-player) di kedua tema.
+    return DarkZone(
+      child: Material(
       color: const Color(0xFF2A1416),
       child: Container(
         decoration: const BoxDecoration(border: Border(top: BorderSide(color: Rave.berry, width: 2))),
@@ -126,8 +129,10 @@ class _ConnectionBannerState extends State<ConnectionBanner> {
             child: Text(current, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: Rave.mono, fontSize: 11.5, color: Rave.muted)),
           ),
           const SizedBox(height: 6),
-          SingleChildScrollView(
+          FadedEdges(
+            child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
             child: Row(children: [
               TextButton(onPressed: _checking ? null : _check, child: Text(s.retry.toUpperCase(), style: Rave.label(size: 11, color: Rave.mustard))),
               for (final p in others)
@@ -135,17 +140,111 @@ class _ConnectionBannerState extends State<ConnectionBanner> {
                   onPressed: () async {
                     final v = await probeServer(_app, p.$2);
                     if (!context.mounted) return;
-                    if (v == null) return toast(context, s.serverUnreachable(p.$1));
+                    if (v == null) return toast(context, s.serverUnreachable(p.$1), kind: ToastKind.error);
                     await switchServer(_app, p.$2);
-                    if (context.mounted) toast(context, s.serverSaved);
+                    if (context.mounted) toast(context, s.serverSaved, kind: ToastKind.ok);
                   },
                   child: Text(s.useServer(p.$1).toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)),
                 ),
-              TextButton(onPressed: () => openItem(context, 'settings', ''), child: Text(s.settings.toUpperCase(), style: Rave.label(size: 11, color: Rave.muted))),
+              TextButton(onPressed: () => showServerSheet(context), child: Text(s.server.toUpperCase(), style: Rave.label(size: 11, color: Rave.muted))),
             ]),
+          ),
           ),
         ]),
       ),
+      ),
     );
   }
+}
+
+
+/// Editor server (pilihan cepat + alamat + Uji/OK). Dipakai di Pengaturan (akun) dan lembar Server dari banner
+/// koneksi — agar tamu tetap bisa memulihkan koneksi tanpa membuka Pengaturan.
+class ServerEditor extends StatefulWidget {
+  const ServerEditor({super.key, this.onSaved});
+  final VoidCallback? onSaved;
+  @override
+  State<ServerEditor> createState() => _ServerEditorState();
+}
+
+class _ServerEditorState extends State<ServerEditor> {
+  late final _server = TextEditingController(text: App.read(context).settings.server);
+  String? _test;
+  bool _testOk = false;
+
+  @override
+  void dispose() {
+    _server.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testServer() async {
+    final app = App.read(context);
+    final u = Settings.normalize(_server.text);
+    if (u == null) return setState(() => (_test = app.s.serverInvalid, _testOk = false));
+    setState(() => (_test = '…', _testOk = true));
+    final v = await probeServer(app, u);
+    if (!mounted) return;
+    setState(() => v == null ? (_test = app.s.offline, _testOk = false) : (_test = app.s.testOk(v), _testOk = true));
+  }
+
+  Future<void> _saveServer() async {
+    final app = App.read(context);
+    final u = Settings.normalize(_server.text);
+    if (u == null) return setState(() => (_test = app.s.serverInvalid, _testOk = false));
+    if (u == app.settings.server) return;
+    await switchServer(app, u);
+    if (!mounted) return;
+    toast(context, app.s.serverSaved, kind: ToastKind.ok);
+    widget.onSaved?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = App.of(context).s;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      if (serverPresets.length > 1) ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final p in serverPresets)
+            OutlineButton(
+              label: p.$1,
+              active: _server.text == p.$2,
+              onTap: () => setState(() {
+                _server.text = p.$2;
+                _test = null;
+              }),
+            ),
+        ]),
+        const SizedBox(height: 10),
+      ],
+      TextField(controller: _server, keyboardType: TextInputType.url, autocorrect: false, style: const TextStyle(fontFamily: Rave.mono, fontSize: 13)),
+      const SizedBox(height: 10),
+      Row(children: [
+        OutlineButton(label: s.test, onTap: _testServer),
+        const SizedBox(width: 8),
+        OutlineButton(label: 'OK', onTap: _saveServer),
+      ]),
+      if (_test != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_test!, style: Rave.body(size: 13, color: _testOk ? context.rc.accent : Rave.berry))),
+    ]);
+  }
+}
+
+/// Lembar Server dari banner koneksi (juga untuk tamu).
+Future<void> showServerSheet(BuildContext context) {
+  final s = App.read(context).s;
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheet) => Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(sheet).bottom),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.server.toUpperCase(), style: Rave.poster(28)),
+        const SizedBox(height: 6),
+        Text(s.serverHint, style: Rave.body(size: 13, color: sheet.rc.muted)),
+        const SizedBox(height: 14),
+        ServerEditor(onSaved: () => Navigator.pop(sheet)),
+      ]),
+    ),
+  );
 }

@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme.dart';
+import 'motion.dart';
+import 'spectrum.dart';
+
+export 'spectrum.dart' show SpectrumRepo;
 
 /// Kontrol pemutar bergaya tape deck/skin pemutar desktop klasik — sama dengan web (`index.css` .deck-*):
 /// baki gelap berbevel, tombol "piano key" aluminium (bevel terbalik saat ditekan), PLAY mustard, LED toggle,
@@ -58,7 +62,12 @@ class _BevelPainter extends BoxPainter {
   }
 }
 
-/// Tombol "piano key". `toggle` → LED (menyala saat [active]). `play` → kunci PLAY mustard.
+/// Tombol "piano key" bergaya tape deck vintage. `toggle` → LED (menyala saat [active]). `play` → kunci PLAY mustard.
+///
+/// Gerak tekan mekanis: muka tombol turun menutupi "rok" (sisi gelap tombol) dalam ±70 ms saat jari menyentuh,
+/// lalu kembali dengan pegas sedikit memantul saat dilepas (tekanan singkat tetap terlihat penuh). Toggle yang aktif
+/// tetap "terkunci" setengah turun seperti tuts deck kaset. Haptik dua tahap: klik ringan saat masuk, klik halus saat
+/// kembali. Gerak dikurangi → langsung tanpa animasi.
 class DeckKey extends StatefulWidget {
   const DeckKey({
     super.key,
@@ -78,106 +87,194 @@ class DeckKey extends StatefulWidget {
   final double width, height;
   final String semantic;
 
+  /// Jarak tempuh muka tombol (dp) — juga tinggi "rok" yang terlihat di bawah muka saat diam.
+  static const travel = 3.0;
+  /// Posisi tuts toggle aktif (0 = diam, 1 = tertekan penuh).
+  static const latched = 0.6;
+
   @override
   State<DeckKey> createState() => _DeckKeyState();
 }
 
-class _DeckKeyState extends State<DeckKey> {
-  bool down = false;
+class _DeckKeyState extends State<DeckKey> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, lowerBound: -0.25, upperBound: 1, value: _rest);
+  bool _held = false;
+  bool _reduced = false; // diperbarui di build — aman dibaca saat widget sedang dilepas
+
+  double get _rest => widget.toggle && widget.active ? DeckKey.latched : 0;
+
+  @override
+  void didUpdateWidget(DeckKey old) {
+    super.didUpdateWidget(old);
+    if (!_held && (old.active != widget.active || old.toggle != widget.toggle)) _settle();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  // Listener (bukan onTapDown) → tuts bereaksi saat jari menyentuh, tanpa jeda 100 ms pengenal ketukan.
+  void _down(PointerDownEvent _) {
+    if (widget.locked) return;
+    _held = true;
+    HapticFeedback.lightImpact();
+    if (_reduced) {
+      _c.value = 1;
+    } else {
+      _c.animateTo(1, duration: const Duration(milliseconds: 70), curve: Curves.easeOutCubic);
+    }
+  }
+
+  void _up(PointerEvent e) {
+    if (!_held) return;
+    _held = false;
+    if (_reduced || _c.value >= 1) return _release(click: e is PointerUpEvent);
+    // Tekanan secepat kilat: tuntaskan dulu perjalanan turun, baru kembali — tuts selalu terasa "masuk".
+    _c
+        .animateTo(1, duration: Duration(milliseconds: (70 * (1 - _c.value)).round().clamp(16, 70)), curve: Curves.easeOutCubic)
+        .then((_) {
+      if (mounted && !_held) _release(click: e is PointerUpEvent);
+    });
+  }
+
+  void _release({required bool click}) {
+    if (click) HapticFeedback.selectionClick();
+    _settle();
+  }
+
+  void _settle() {
+    if (_reduced) {
+      _c.value = _rest;
+    } else {
+      // Pegas pendek: sedikit melewati posisi diam (naik) lalu mengendap — seperti tuts deck yang memantul.
+      _c.animateTo(_rest, duration: const Duration(milliseconds: 260), curve: Curves.easeOutBack);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pressed = down || (widget.toggle && widget.active);
-    final colors = widget.play
-        ? (pressed ? const [Deck.playBot, Rave.mustard] : const [Deck.playTop, Rave.mustard, Deck.playBot])
-        : (pressed ? const [Color(0xFF34323A), Color(0xFF3E3C45)] : const [Deck.keyTop, Deck.keyMid, Deck.keyBot]);
+    _reduced = RaveMotion.reduced(context);
     final fg = widget.play ? Rave.ink : const Color(0xFFE4E1EA);
+    final upColors = widget.play ? const [Deck.playTop, Rave.mustard, Deck.playBot] : const [Deck.keyTop, Deck.keyMid, Deck.keyBot];
+    final downColors = widget.play ? const [Deck.playBot, Rave.mustard, Rave.mustard] : const [Color(0xFF34323A), Color(0xFF393740), Color(0xFF3E3C45)];
+    final upLight = widget.play ? const Color(0xFFFFF0B3) : Deck.hiLight, upDark = widget.play ? const Color(0xFF8A6505) : Deck.loLight;
+    const downLight = Color(0xFF16151A), downDark = Color(0xFF6D6977);
+    final skirt = widget.play ? const [Color(0xFFB88A08), Color(0xFF6E5004)] : const [Color(0xFF2B2930), Color(0xFF141317)];
+    const tr = DeckKey.travel;
     return Semantics(
       button: true,
       label: widget.semantic,
       toggled: widget.toggle ? widget.active : null,
       enabled: !widget.locked,
-      child: GestureDetector(
-        onTapDown: widget.locked ? null : (_) => setState(() => down = true),
-        onTapCancel: () => setState(() => down = false),
-        onTapUp: (_) => setState(() => down = false),
-        onTap: widget.locked || widget.onTap == null
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                widget.onTap!();
-              },
-        child: Opacity(
-          opacity: widget.locked ? 0.55 : 1,
-          child: Container(
-            width: widget.width,
-            height: widget.height,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors),
-              border: Border.all(color: Deck.edge),
-            ),
-            foregroundDecoration: _Bevel(
-              light: pressed ? const Color(0xFF16151A) : (widget.play ? const Color(0xFFFFF0B3) : Deck.hiLight),
-              dark: pressed ? const Color(0xFF6D6977) : (widget.play ? const Color(0xFF8A6505) : Deck.loLight),
-            ),
-            child: Stack(alignment: Alignment.center, children: [
-              Transform.translate(
-                offset: pressed ? const Offset(1, 1) : Offset.zero,
-                child: IconTheme(
-                  data: IconThemeData(color: fg, size: widget.height * 0.5, shadows: [Shadow(color: widget.play ? Colors.white54 : Colors.black87, offset: const Offset(1, 1))]),
-                  child: widget.child,
+      // Area sentuh setinggi ≥ 48 dp tanpa menggeser muka tombol: lebar = lebar muka (tepi kiri/kanan yang terlihat
+      // tetap sejajar gutter), tinggi diperluas simetris di sekitar muka.
+      child: Listener(
+        onPointerDown: _down,
+        onPointerUp: _up,
+        onPointerCancel: _up,
+        child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.locked || widget.onTap == null ? null : widget.onTap,
+        child: SizedBox(
+          width: widget.width,
+          height: max(widget.height, Rave.tap),
+          child: Center(
+            child: Opacity(
+              opacity: widget.locked ? 0.55 : 1,
+              child: SizedBox(
+                width: widget.width,
+                height: widget.height,
+                child: AnimatedBuilder(
+                  animation: _c,
+                  builder: (context, _) {
+                    final v = _c.value; // bisa sedikit < 0 saat memantul
+                    final t = v.clamp(0.0, 1.0);
+                    final lerp = [for (var i = 0; i < 3; i++) Color.lerp(upColors[i], downColors[i], t)!];
+                    return Stack(clipBehavior: Clip.none, children: [
+                      // Sumur + rok tuts: sisi gelap yang tampak di bawah muka saat tuts naik.
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: skirt),
+                            border: Border.all(color: Deck.edge),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: tr * v,
+                        height: widget.height - tr,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: lerp),
+                            border: Border.all(color: Deck.edge),
+                          ),
+                          foregroundDecoration: _Bevel(light: Color.lerp(upLight, downLight, t)!, dark: Color.lerp(upDark, downDark, t)!),
+                          child: Stack(alignment: Alignment.center, children: [
+                            IconTheme(
+                              data: IconThemeData(
+                                color: fg,
+                                size: widget.height * 0.5,
+                                shadows: [Shadow(color: (widget.play ? Colors.white54 : Colors.black87).withValues(alpha: 1 - 0.6 * t), offset: const Offset(1, 1))],
+                              ),
+                              child: widget.child,
+                            ),
+                            if (widget.toggle)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: AnimatedContainer(
+                                  duration: _reduced ? Duration.zero : const Duration(milliseconds: 160),
+                                  width: 8,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: widget.active ? Deck.ledOn : Deck.ledOff,
+                                    boxShadow: widget.active ? const [BoxShadow(color: Color(0xBFF4C21F), blurRadius: 5, spreadRadius: 1)] : null,
+                                  ),
+                                ),
+                              ),
+                          ]),
+                        ),
+                      ),
+                    ]);
+                  },
                 ),
               ),
-              if (widget.toggle)
-                Positioned(
-                  left: 4,
-                  top: 4,
-                  child: Container(
-                    width: 8,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: widget.active ? Deck.ledOn : Deck.ledOff,
-                      boxShadow: widget.active ? const [BoxShadow(color: Color(0xBFF4C21F), blurRadius: 5, spreadRadius: 1)] : null,
-                    ),
-                  ),
-                ),
-            ]),
+            ),
           ),
         ),
+      ),
       ),
     );
   }
 }
 
-/// Layar LCD: status (PLAY/PAUSE/BUFFER/STOP), codec, waktu besar fosfor mustard, spektrum animasi.
-class DeckLcd extends StatefulWidget {
-  const DeckLcd({super.key, required this.status, required this.codec, required this.time, required this.on, this.dim = false});
+/// Layar LCD: status (PLAY/PAUSE/BUFFER/STOP), codec, waktu besar fosfor mustard, dan spektrum yang mengikuti lagu
+/// ([DeckSpectrum]) memenuhi SISA lebar LCD — bilah sebanyak lebarnya. Tanpa [trackId]/[spectrum] → dekoratif.
+class DeckLcd extends StatelessWidget {
+  const DeckLcd({
+    super.key,
+    required this.status,
+    required this.codec,
+    required this.time,
+    required this.on,
+    this.dim = false,
+    this.trackId,
+    this.position,
+    this.spectrum,
+  });
   final String status;
   final String? codec;
   final String time;
   final bool on, dim;
-  @override
-  State<DeckLcd> createState() => _DeckLcdState();
-}
 
-class _DeckLcdState extends State<DeckLcd> with SingleTickerProviderStateMixin {
-  late final c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-  @override
-  void initState() {
-    super.initState();
-    if (widget.on) c.repeat(reverse: true);
-  }
-
-  @override
-  void didUpdateWidget(DeckLcd old) {
-    super.didUpdateWidget(old);
-    widget.on ? (c.isAnimating ? null : c.repeat(reverse: true)) : c.stop();
-  }
-
-  @override
-  void dispose() {
-    c.dispose();
-    super.dispose();
-  }
+  /// Lagu yang amplop spektrumnya diputar (null: episode, iklan, live → dekoratif).
+  final String? trackId;
+  final Duration Function()? position;
+  final SpectrumRepo? spectrum;
 
   static const _glow = [Shadow(color: Color(0x8CF4C21F), blurRadius: 6)];
 
@@ -202,30 +299,15 @@ class _DeckLcdState extends State<DeckLcd> with SingleTickerProviderStateMixin {
           SizedBox(
             width: 64,
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.status, style: mono(9)),
+              Text(status, style: mono(9)),
               const SizedBox(height: 4),
-              Text(widget.codec ?? '----', maxLines: 1, overflow: TextOverflow.clip, style: mono(9, dim: widget.codec == null)),
+              Text(codec ?? '----', maxLines: 1, overflow: TextOverflow.clip, style: mono(9, dim: codec == null)),
             ]),
           ),
-          Text(widget.time, style: mono(24, dim: widget.dim)),
-          const Spacer(),
-          AnimatedBuilder(
-            animation: c,
-            builder: (_, _) => Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(9, (i) {
-                final h = widget.on ? 0.15 + 0.85 * (0.5 + 0.5 * sin(c.value * pi * 2 + i * 0.9)).abs() : 0.12;
-                return Container(
-                  width: 3,
-                  height: 24 * h,
-                  margin: const EdgeInsets.only(left: 2),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Rave.mustard, Rave.mustard, Deck.playTop, Color(0xFFFF6A3D)], stops: [0, 0.55, 0.8, 1]),
-                    boxShadow: [BoxShadow(color: Color(0x66F4C21F), blurRadius: 4)],
-                  ),
-                );
-              }),
-            ),
+          Text(time, style: mono(24, dim: dim)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: DeckSpectrum(trackId: trackId, playing: on, dim: dim, position: position, repo: spectrum),
           ),
         ]),
       ]),
@@ -290,6 +372,7 @@ class _DeckSliderState extends State<DeckSlider> {
                 },
           onTapUp: widget.locked ? null : (d) => widget.onChanged(_at(d.localPosition, w)),
           child: SizedBox(
+            width: w,
             height: 32,
             child: Stack(alignment: Alignment.centerLeft, clipBehavior: Clip.none, children: [
               Container(
@@ -304,7 +387,8 @@ class _DeckSliderState extends State<DeckSlider> {
                 ),
               ),
               Positioned(
-                left: (w * pct - 12).clamp(-2.0, w - 22),
+                // Thumb tetap di dalam lintasan → tepi slider yang terlihat = tepi isi.
+                left: (w * pct - 12).clamp(0.0, max(0.0, w - 24)),
                 child: Container(
                   width: 24,
                   height: 16,
