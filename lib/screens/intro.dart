@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:ui' show PointMode;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +9,7 @@ import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../core/settings.dart';
+import '../widgets/cassette.dart';
 import '../widgets/common.dart';
 import '../widgets/feedback.dart';
 import '../widgets/connection.dart';
@@ -191,6 +193,14 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
 
 // =================================================================== ONBOARDING
 
+/// Ritme tata letak onboarding (dp): gutter horizontal mengikuti lebar (layar 320 dp tetap lega), judul poster
+/// diskalakan dengan lebar, jarak vertikal dari skala 4/8/12/16.
+abstract final class _Ob {
+  static double gutter(double w) => w < 360 ? Rave.gutter : Rave.gutter * 1.5;
+  static double title(double w) => (w * 0.11).clamp(34.0, 46.0);
+  static const xs = 4.0, s = 8.0, m = 12.0, l = 16.0;
+}
+
 /// Onboarding personalisasi (sama dengan web /onboarding & endpoint /v1/me/onboarding):
 /// Selamat datang → kota → genre → min. 3 artis → siap (Daftar / Masuk / Jelajahi dulu).
 /// Pilihan tamu disimpan di perangkat dan dikirim saat ia mendaftar/masuk.
@@ -252,44 +262,50 @@ class _OnboardingState extends State<Onboarding> {
   Widget build(BuildContext context) {
     final app = App.of(context);
     final s = app.s;
+    final g = _Ob.gutter(MediaQuery.sizeOf(context).width);
     const tints = [Rave.purple, Rave.teal, Rave.plum, Rave.berry, Rave.purple];
     return Scaffold(
       backgroundColor: Rave.canvas,
       body: Stack(fit: StackFit.expand, children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 500),
-          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [tints[step], Rave.canvas], stops: const [0, 0.7])),
+          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [tints[step], Rave.canvas], stops: const [0, 0.62])),
         ),
         SafeArea(
           child: Column(children: [
-            // Kepala: kembali · progres bersegmen · bahasa · lewati
+            // Kepala: kembali · progres bersegmen · bahasa · lewati (muncul/hilang dengan animasi ukuran, tanpa lompatan).
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 8, 0),
+              padding: EdgeInsets.fromLTRB(4, _Ob.xs, g - 8, 0),
               child: Row(children: [
-                SizedBox(
-                  width: 44,
+                SizedBox.square(
+                  dimension: Rave.tap,
                   child: step > 0 ? IconButton(tooltip: MaterialLocalizations.of(context).backButtonTooltip, onPressed: () => _go(step - 1), icon: const Icon(Icons.arrow_back_rounded)) : null,
                 ),
                 Expanded(
-                  child: Row(children: [
-                    for (var k = 0; k < steps; k++)
-                      Expanded(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          height: 4,
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          color: k <= step ? Rave.mustard : Rave.paper.withValues(alpha: 0.2),
+                  child: Semantics(
+                    label: '${step + 1} / $steps',
+                    child: Row(children: [
+                      for (var k = 0; k < steps; k++)
+                        Expanded(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            height: 4,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            color: k <= step ? Rave.mustard : Rave.paper.withValues(alpha: 0.18),
+                          ),
                         ),
-                      ),
-                  ]),
-                ),
-                for (final l in ['id', 'en'])
-                  GestureDetector(
-                    onTap: () => app.settings.setLocale(l),
-                    child: Padding(padding: const EdgeInsets.all(8), child: Text(l.toUpperCase(), style: Rave.label(size: 11, color: app.settings.locale == l ? Rave.mustard : Rave.paper.withValues(alpha: 0.5)))),
+                    ]),
                   ),
-                if (step > 0 && step < steps - 1)
-                  TextButton(onPressed: () => _go(steps - 1), child: Text(s.obSkip.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper))),
+                ),
+                const SizedBox(width: _Ob.m),
+                _LangToggle(value: app.settings.locale, onChanged: app.settings.setLocale),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  child: step > 0 && step < steps - 1
+                      ? TextButton(onPressed: () => _go(steps - 1), child: Text(s.obSkip.toUpperCase(), style: Rave.label(size: 11, color: Rave.paper)))
+                      : const SizedBox(width: 8, height: Rave.tap),
+                ),
               ]),
             ),
             Expanded(
@@ -308,7 +324,7 @@ class _OnboardingState extends State<Onboarding> {
                     eyebrow: '02 / 03',
                     title: s.obGenreTitle,
                     hint: s.obPicked(genres.length),
-                    child: _GenreChips(selected: genres, onTap: (g) => setState(() => genres.contains(g) ? genres.remove(g) : genres.add(g))),
+                    child: _GenreChips(selected: genres, onTap: (x) => setState(() => genres.contains(x) ? genres.remove(x) : genres.add(x))),
                   ),
                   _Question(
                     eyebrow: '03 / 03',
@@ -320,14 +336,15 @@ class _OnboardingState extends State<Onboarding> {
                 ],
               ),
             ),
+            // CTA tersemat di bawah (SafeArea memberi jarak bilah navigasi/gesture).
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+              padding: EdgeInsets.fromLTRB(g, _Ob.m, g, _Ob.l),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 260),
                 child: step == steps - 1
-                    ? Column(key: const ValueKey('cta'), children: [
+                    ? Column(key: const ValueKey('cta'), mainAxisSize: MainAxisSize.min, children: [
                         PrimaryButton(label: s.signInOrUp, onTap: () => _finish(auth: 'login')),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: _Ob.m),
                         SizedBox(width: double.infinity, child: _Ghost(label: s.obGuest, onTap: _finish)),
                       ])
                     : SizedBox(
@@ -345,49 +362,250 @@ class _OnboardingState extends State<Onboarding> {
   }
 }
 
-/// Langkah 0: poster sambutan dengan sampul yang berjatuhan masuk.
+/// Pilihan bahasa ID/EN ringkas: segmen terpilih mustard berteks ink.
+class _LangToggle extends StatelessWidget {
+  const _LangToggle({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(border: Border.all(color: Rave.paper.withValues(alpha: 0.3))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (final l in const ['id', 'en'])
+            Semantics(
+              button: true,
+              selected: value == l,
+              child: InkWell(
+                onTap: () => onChanged(l),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  color: value == l ? Rave.mustard : Colors.transparent,
+                  child: Text(l.toUpperCase(), style: Rave.label(size: 11, color: value == l ? Rave.ink : Rave.paper.withValues(alpha: 0.7))),
+                ),
+              ),
+            ),
+        ]),
+      );
+}
+
+/// Blok teks bawah sebuah slide: menyusut ke isinya, tetapi tidak pernah lebih dari [maxFraction] tinggi slide —
+/// teks besar (skala 1,3) di layar pendek menggulir alih-alih overflow; ilustrasi di atasnya yang mengecil.
+class _TextBlock extends StatelessWidget {
+  const _TextBlock({required this.maxHeight, required this.children});
+  final double maxHeight;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+        ),
+      );
+}
+
+/// Langkah 0: logo · kaset di depan kipas sampul rilis asli · judul · deskripsi · tautan masuk.
 class _Welcome extends StatelessWidget {
   const _Welcome({required this.onLogin});
   final VoidCallback onLogin;
   @override
   Widget build(BuildContext context) {
     final s = App.of(context).s;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 8),
-        Image.asset('assets/brand/rave-logo.webp', height: 30),
-        const Expanded(child: Center(child: _ArtCovers())),
-        Text(s.ob1Title.toUpperCase(), style: Rave.poster(MediaQuery.sizeOf(context).width > 400 ? 50 : 42)),
-        const SizedBox(height: 10),
-        Text(s.ob1Body, style: Rave.body(size: 15.5, color: Rave.paper.withValues(alpha: 0.85), height: 1.45)),
-        TextButton(
-          style: TextButton.styleFrom(padding: EdgeInsets.zero),
-          onPressed: onLogin,
-          child: Text(s.haveAccount, style: Rave.body(weight: FontWeight.w700, color: Rave.mustard)),
+    final w = MediaQuery.sizeOf(context).width;
+    final g = _Ob.gutter(w);
+    return LayoutBuilder(builder: (context, c) {
+      // Layar pendek (mis. 360×640, atau teks diperbesar): judul & badan lebih ringkas, eyebrow disembunyikan,
+      // jarak dirapatkan → kaset & sampul tetap terlihat (mengecil), tidak hilang.
+      final compact = c.maxHeight < 520;
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: g),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SizedBox(height: _Ob.s),
+          Image.asset('assets/brand/rave-logo.webp', height: compact ? 24 : 28, semanticLabel: 'RAVE'),
+          Expanded(child: Padding(padding: EdgeInsets.symmetric(vertical: compact ? _Ob.s : _Ob.l), child: const WelcomeArt())),
+          _TextBlock(maxHeight: c.maxHeight * 0.62, children: [
+            if (!compact) ...[
+              Eyebrow('DIY · Indie · Live', color: Rave.mustard, size: 11),
+              const SizedBox(height: _Ob.s),
+            ],
+            Text(s.ob1Title.toUpperCase(), style: Rave.poster(compact ? 30 : _Ob.title(w) + 4)),
+            SizedBox(height: compact ? _Ob.s : _Ob.m),
+            Text(s.ob1Body, style: Rave.body(size: compact ? 14 : 15, color: Rave.paper.withValues(alpha: 0.82), height: 1.42)),
+            const SizedBox(height: _Ob.xs),
+            TextButton(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, Rave.tap), alignment: Alignment.centerLeft),
+              onPressed: onLogin,
+              child: Text(s.haveAccount, style: Rave.body(weight: FontWeight.w700, color: Rave.mustard)),
+            ),
+          ]),
+        ]),
+      );
+    });
+  }
+}
+
+/// Pilih hingga [max] sampul rilis asli dari data beranda (`/v1/catalog/home`): seksi berjenis `releases` (Rilis Baru)
+/// lebih dulu, lalu quick picks berjenis rilis. URL kosong & duplikat dibuang.
+List<String> welcomeCovers(HomeData d, {int max = 3}) {
+  final out = <String>[];
+  void add(MediaItem m) {
+    final u = m.imageUrl;
+    if (out.length < max && m.kind == 'release' && u != null && u.isNotEmpty && !out.contains(u)) out.add(u);
+  }
+
+  for (final sec in d.sections) {
+    if (sec.kind == 'releases') sec.items.forEach(add);
+  }
+  d.quickPicks.forEach(add);
+  return out;
+}
+
+/// Ilustrasi slide 1: tiga sampul rilis asli terkipas di belakang kaset RAVE. Ukuran slot tetap (dihitung dari ruang
+/// yang tersedia) → tidak ada lompatan tata letak: sampul cadangan bergaya tampil dulu, sampul asli memudar masuk
+/// di atasnya; offline/tanpa sampul → tetap sampul cadangan. Kunci cache sama dengan beranda tamu (prefetch gratis).
+class WelcomeArt extends StatefulWidget {
+  const WelcomeArt({super.key});
+
+  /// Tinggi / lebar komposisi.
+  static const ratio = 0.86;
+
+  /// Kunci [DataCache] = kunci `ApiView` beranda tanpa kota.
+  static const cacheKey = '/v1/catalog/home?';
+
+  @override
+  State<WelcomeArt> createState() => _WelcomeArtState();
+}
+
+class _WelcomeArtState extends State<WelcomeArt> {
+  List<String> covers = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    final app = App.read(context);
+    final cached = app.cache.peek(WelcomeArt.cacheKey);
+    if (cached is HomeData) covers = welcomeCovers(cached);
+    if (!app.cache.isFresh(WelcomeArt.cacheKey)) _load(app);
+  }
+
+  Future<void> _load(AppState app) async {
+    try {
+      final v = await app.cache.load(
+        WelcomeArt.cacheKey,
+        () async => HomeData.fromJson(await app.api.request<Json>('/v1/catalog/home', auth: false, timeout: const Duration(seconds: 8))),
+      );
+      if (!mounted || v is! HomeData) return;
+      final next = welcomeCovers(v);
+      if (next.isNotEmpty) setState(() => covers = next);
+    } catch (_) {
+      // Offline / server lama: sampul cadangan tetap tampil.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final w = min(c.maxWidth, min(c.maxHeight / WelcomeArt.ratio, 380.0));
+      if (!w.isFinite || w < 96) return const SizedBox.shrink(); // layar sangat pendek: teks didahulukan
+      final h = w * WelcomeArt.ratio;
+      final cover = w * 0.44;
+      final tape = w * 0.80;
+      Widget slot(int k, double left, double top, double angle) => Positioned(
+            left: left,
+            top: top,
+            child: Transform.rotate(angle: angle, child: _CoverSlot(size: cover, index: k, url: k < covers.length ? covers[k] : null)),
+          );
+      return Center(
+        child: RepaintBoundary(
+          child: MediaQuery.withNoTextScaling(
+            child: SizedBox(
+              key: const ValueKey('welcome-art'),
+              width: w,
+              height: h,
+              child: Stack(clipBehavior: Clip.none, children: [
+                slot(1, w * 0.04, h * 0.08, -0.13),
+                slot(2, w - cover - w * 0.04, h * 0.10, 0.11),
+                slot(0, (w - cover) / 2, 0, -0.02),
+                Positioned(left: (w - tape) / 2, bottom: w * 0.02, child: Transform.rotate(angle: -0.035, child: Cassette(width: tape))),
+              ]),
+            ),
+          ),
         ),
+      );
+    });
+  }
+}
+
+/// Satu slot sampul berukuran tetap: sampul cadangan bergaya RAVE di bawah, sampul asli (bila ada) memudar di atasnya.
+class _CoverSlot extends StatelessWidget {
+  const _CoverSlot({required this.size, required this.index, this.url});
+  final double size;
+  final int index;
+  final String? url;
+
+  static const _colors = [Rave.mustard, Rave.purpleSoft, Rave.teal];
+  static const _titles = ['SENJA', 'NIRMALA', 'DARA'];
+
+  @override
+  Widget build(BuildContext context) {
+    final src = App.of(context).api.media(url);
+    final fg = index == 0 ? Rave.ink : Rave.paper;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: _colors[index], border: Border.all(color: Rave.ink, width: 2), boxShadow: const [BoxShadow(color: Rave.shadow, offset: Offset(5, 5))]),
+      child: Stack(fit: StackFit.expand, children: [
+        Positioned(left: size * 0.08, top: size * 0.08, right: size * 0.08, child: Text(_titles[index], maxLines: 1, overflow: TextOverflow.clip, style: Rave.poster(size * 0.16, color: fg))),
+        Positioned(right: size * 0.07, bottom: size * 0.07, child: Text('RV-0${index + 1}', style: Rave.label(size: max(7, size * 0.065), color: fg))),
+        if (src != null)
+          CachedNetworkImage(
+            key: ValueKey(src),
+            imageUrl: src,
+            fit: BoxFit.cover,
+            memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+            fadeInDuration: const Duration(milliseconds: 380),
+            placeholder: (_, _) => const SizedBox.shrink(),
+            errorWidget: (_, _, _) => const SizedBox.shrink(),
+          ),
       ]),
     );
   }
 }
 
+/// Slide pertanyaan: eyebrow · judul · petunjuk, lalu isi. Ruang cukup → kepala tersemat & isi bergulir; layar
+/// pendek / teks besar → semuanya bergulir bersama (tak pernah overflow).
 class _Question extends StatelessWidget {
   const _Question({required this.eyebrow, required this.title, required this.hint, required this.child});
   final String eyebrow, title, hint;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+  Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    final g = _Ob.gutter(w);
+    final header = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Eyebrow(eyebrow, color: Rave.mustard, size: 11),
+      const SizedBox(height: _Ob.s),
+      Text(title.toUpperCase(), style: Rave.poster(_Ob.title(w))),
+      const SizedBox(height: _Ob.s),
+      AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Text(hint, key: ValueKey(hint), style: Rave.body(size: 14, color: Rave.muted))),
+      const SizedBox(height: _Ob.l + _Ob.xs),
+    ]);
+    return LayoutBuilder(builder: (context, c) {
+      if (c.maxHeight < 420) {
+        return SingleChildScrollView(padding: EdgeInsets.fromLTRB(g, _Ob.l, g, _Ob.l), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header, child]));
+      }
+      return Padding(
+        padding: EdgeInsets.fromLTRB(g, _Ob.l, g, 0),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Eyebrow(eyebrow, color: Rave.mustard),
-          const SizedBox(height: 8),
-          Text(title.toUpperCase(), style: Rave.poster(38)),
-          const SizedBox(height: 6),
-          AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Text(hint, key: ValueKey(hint), style: Rave.body(size: 14, color: Rave.muted))),
-          const SizedBox(height: 16),
-          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.only(bottom: 12), child: child)),
+          header,
+          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.only(bottom: _Ob.l), child: child)),
         ]),
       );
+    });
+  }
 }
 
 /// Chip pilihan bergaya stiker: memantul & miring saat dipilih.
@@ -398,35 +616,40 @@ class _Chips extends StatelessWidget {
   final void Function(String) onTap;
   final Map<String, String>? labels;
   @override
-  Widget build(BuildContext context) => Wrap(spacing: 10, runSpacing: 10, children: [
+  Widget build(BuildContext context) => Wrap(spacing: _Ob.s, runSpacing: _Ob.s + 2, children: [
         for (var i = 0; i < options.length; i++)
           Builder(builder: (_) {
             final o = options[i];
             final on = selected.contains(o);
-            return GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onTap(o);
-              },
-              child: AnimatedScale(
-                scale: on ? 1.06 : 1,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutBack,
-                child: AnimatedRotation(
-                  turns: on ? (i.isEven ? -0.008 : 0.008) : 0,
+            return Semantics(
+              button: true,
+              selected: on,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTap(o);
+                },
+                child: AnimatedScale(
+                  scale: on ? 1.05 : 1,
                   duration: const Duration(milliseconds: 180),
-                  child: AnimatedContainer(
+                  curve: Curves.easeOutBack,
+                  child: AnimatedRotation(
+                    turns: on ? (i.isEven ? -0.008 : 0.008) : 0,
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: on ? Rave.mustard : Colors.white.withValues(alpha: 0.08),
-                      border: Border.all(color: on ? Rave.ink : Rave.paper.withValues(alpha: 0.25), width: on ? 2 : 1),
-                      boxShadow: on ? Rave.hardShadow : null,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      constraints: const BoxConstraints(minHeight: 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: on ? Rave.mustard : Colors.white.withValues(alpha: 0.07),
+                        border: Border.all(color: on ? Rave.ink : Rave.paper.withValues(alpha: 0.22), width: on ? 2 : 1),
+                        boxShadow: on ? Rave.hardShadow : null,
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (on) ...[const Icon(Icons.check_rounded, size: 16, color: Rave.ink), const SizedBox(width: _Ob.xs)],
+                        Flexible(child: Text((labels?[o] ?? o).toUpperCase(), style: Rave.label(size: 11.5, color: on ? Rave.ink : Rave.paper))),
+                      ]),
                     ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (on) ...[const Icon(Icons.check_rounded, size: 16, color: Rave.ink), const SizedBox(width: 4)],
-                      Text((labels?[o] ?? o).toUpperCase(), style: Rave.label(size: 11.5, color: on ? Rave.ink : Rave.paper)),
-                    ]),
                   ),
                 ),
               ),
@@ -595,7 +818,8 @@ class _GenreChipsState extends State<_GenreChips> {
       );
 }
 
-/// Kisi artis bulat; artis bergenre pilihan diurutkan lebih dulu. Tanda centang mustard saat dipilih.
+/// Kisi artis; artis bergenre pilihan diurutkan lebih dulu. Jumlah kolom & ukuran foto mengikuti lebar, tinggi sel
+/// mengikuti skala teks (nama 2 baris) → tak pernah overflow. Tanda centang mustard saat dipilih.
 class _ArtistPicker extends StatelessWidget {
   const _ArtistPicker({required this.selected, required this.genres, required this.onTap});
   final Set<String> selected, genres;
@@ -608,52 +832,68 @@ class _ArtistPicker extends StatelessWidget {
       builder: (_, j) {
         final data = ((j?['data'] as List?) ?? const []).map((a) => ArtistSummary.fromJson(a as Json)).toList();
         data.sort((a, b) => (b.genres.any(genres.contains) ? 1 : 0) - (a.genres.any(genres.contains) ? 1 : 0));
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 120, mainAxisExtent: 142, crossAxisSpacing: 10, mainAxisSpacing: 6),
-          itemCount: data.length,
-          itemBuilder: (_, i) {
-            final a = data[i];
-            final on = selected.contains(a.id);
-            return GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onTap(a.id);
-              },
-              child: Column(children: [
-                AnimatedScale(
-                  scale: on ? 0.92 : 1,
-                  duration: const Duration(milliseconds: 160),
-                  child: Stack(clipBehavior: Clip.none, children: [
-                    Container(
-                      decoration: BoxDecoration(border: Border.all(color: on ? Rave.mustard : Rave.ink, width: 3), boxShadow: Rave.hardShadow),
-                      child: Cover(a.imageUrl, size: 92),
-                    ),
-                    if (on)
-                      Positioned(
-                        right: -2,
-                        bottom: 2,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2)),
-                          child: const Icon(Icons.check_rounded, size: 16, color: Rave.ink),
+        return LayoutBuilder(builder: (context, c) {
+          const gap = _Ob.m;
+          final cols = (c.maxWidth / 112).floor().clamp(3, 5);
+          final cell = (c.maxWidth - gap * (cols - 1)) / cols;
+          final photo = min(cell - 6, 96.0);
+          final nameH = MediaQuery.textScalerOf(context).scale(12.5) * 1.25 * 2 + 2;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisExtent: photo + _Ob.s + nameH + _Ob.xs, crossAxisSpacing: gap, mainAxisSpacing: _Ob.s),
+            itemCount: data.length,
+            itemBuilder: (_, i) {
+              final a = data[i];
+              final on = selected.contains(a.id);
+              return Semantics(
+                button: true,
+                selected: on,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onTap(a.id);
+                  },
+                  child: Column(children: [
+                    AnimatedScale(
+                      scale: on ? 0.92 : 1,
+                      duration: const Duration(milliseconds: 160),
+                      child: Stack(clipBehavior: Clip.none, children: [
+                        Container(
+                          decoration: BoxDecoration(border: Border.all(color: on ? Rave.mustard : Rave.ink, width: 3), boxShadow: Rave.hardShadow),
+                          child: Cover(a.imageUrl, size: photo - 6),
                         ),
-                      ),
+                        if (on)
+                          Positioned(
+                            right: -2,
+                            bottom: 2,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2)),
+                              child: const Icon(Icons.check_rounded, size: 16, color: Rave.ink),
+                            ),
+                          ),
+                      ]),
+                    ),
+                    const SizedBox(height: _Ob.s),
+                    Text(a.name,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: Rave.body(size: 12.5, weight: FontWeight.w700, color: on ? Rave.mustard : Rave.paper, height: 1.25)),
                   ]),
                 ),
-                const SizedBox(height: 6),
-                Text(a.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: Rave.body(size: 12.5, weight: FontWeight.w700, color: on ? Rave.mustard : Rave.paper)),
-              ]),
-            );
-          },
-        );
+              );
+            },
+          );
+        });
       },
     );
   }
 }
 
-/// Langkah terakhir: ringkasan pilihan + fitur unggulan (lirik, latar belakang, dukung artis).
+/// Langkah terakhir: tiket gig (mengecil di layar pendek) · ringkasan pilihan · dua fitur unggulan.
 class _Ready extends StatelessWidget {
   const _Ready({required this.city, required this.genres, required this.artists});
   final String? city;
@@ -661,8 +901,10 @@ class _Ready extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = App.of(context).s;
+    final w = MediaQuery.sizeOf(context).width;
+    final g = _Ob.gutter(w);
     Widget feat(IconData i, String t, String b) => Padding(
-          padding: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.only(top: _Ob.l),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
               width: 40,
@@ -670,29 +912,48 @@ class _Ready extends StatelessWidget {
               decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: Rave.hardShadow),
               child: Icon(i, color: Rave.ink, size: 20),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: _Ob.l),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(t, style: Rave.body(size: 15, weight: FontWeight.w800)),
                 const SizedBox(height: 2),
-                Text(b, style: Rave.body(size: 13, color: Rave.muted, height: 1.35)),
+                Text(b, style: Rave.body(size: 13, color: Rave.muted, height: 1.4)),
               ]),
             ),
           ]),
         );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Center(child: SizedBox(height: 210, child: _ArtLive())),
-        const SizedBox(height: 10),
-        Text(s.obReadyTitle.toUpperCase(), style: Rave.poster(42)),
-        const SizedBox(height: 6),
-        if (artists >= 3) Text(s.obReadySummary(city ?? '-', genres, artists), style: Rave.body(size: 14, color: Rave.mustard)),
-        const SizedBox(height: 18),
-        feat(Icons.lyrics_outlined, s.ob2Title, s.ob2Body),
-        feat(Icons.favorite_rounded, s.ob3Title, s.ob3Body),
-      ]),
-    );
+    final text = [
+      Text(s.obReadyTitle.toUpperCase(), style: Rave.poster(_Ob.title(w))),
+      if (artists >= 3) ...[
+        const SizedBox(height: _Ob.s),
+        Text(s.obReadySummary(city ?? '-', genres, artists), style: Rave.body(size: 14, color: Rave.mustard, height: 1.35)),
+      ],
+      const SizedBox(height: _Ob.xs),
+      feat(Icons.lyrics_outlined, s.ob2Title, s.ob2Body),
+      feat(Icons.favorite_rounded, s.ob3Title, s.ob3Body),
+      const SizedBox(height: _Ob.l),
+    ];
+    return LayoutBuilder(builder: (context, c) {
+      // Ruang pendek untuk teks sebesar ini → satu gulungan (tiket kecil di atas, teks di bawah) alih-alih ruang
+      // kosong di atas teks yang terpotong.
+      if (c.maxHeight < 420 * MediaQuery.textScalerOf(context).scale(1)) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(g, _Ob.m, g, 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(height: 140, child: _ArtLive()),
+            const SizedBox(height: _Ob.m),
+            ...text,
+          ]),
+        );
+      }
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: g),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Expanded(child: Padding(padding: EdgeInsets.symmetric(vertical: _Ob.l), child: _ArtLive())),
+          _TextBlock(maxHeight: c.maxHeight * 0.7, children: text),
+        ]),
+      );
+    });
   }
 }
 
@@ -758,101 +1019,72 @@ class _VinylPainter extends CustomPainter {
   bool shouldRepaint(_VinylPainter old) => old.label != label;
 }
 
-/// Halaman 1: tumpukan sampul berwarna RAVE yang miring seperti kliping di dinding.
-class _ArtCovers extends StatelessWidget {
-  const _ArtCovers();
-  @override
-  Widget build(BuildContext context) {
-    const cols = [Rave.mustard, Rave.purpleSoft, Rave.teal, Rave.berry];
-    const rot = [-0.16, 0.10, -0.05, 0.14];
-    const off = [Offset(-62, -66), Offset(66, -44), Offset(-54, 62), Offset(58, 76)];
-    return SizedBox(
-      width: 300,
-      height: 300,
-      child: Stack(alignment: Alignment.center, children: [
-        const Positioned(right: -40, child: Vinyl(size: 230, label: Rave.purple)),
-        for (var k = 0; k < 4; k++)
-          Transform.translate(
-            offset: off[k],
-            child: Transform.rotate(
-              angle: rot[k],
-              child: Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(color: cols[k], border: Border.all(color: Rave.ink, width: 2), boxShadow: const [BoxShadow(color: Rave.shadow, offset: Offset(5, 5))]),
-                child: Stack(children: [
-                  Positioned(left: 10, top: 10, child: Text(['SENJA', 'NIRMALA', 'DARA', 'KOTA MATI'][k], style: Rave.poster(20, color: k == 0 ? Rave.ink : Rave.paper))),
-                  Positioned(right: 8, bottom: 8, child: Text('RV-0${k + 1}', style: Rave.label(size: 8.5, color: k == 0 ? Rave.ink : Rave.paper))),
-                ]),
-              ),
-            ),
-          ),
-      ]),
-    );
-  }
-}
-
-/// Halaman 3: tiket gig + stiker LIVE (dukung artis: live, tiket, ikuti).
+/// Langkah terakhir: tiket gig + stiker LIVE (dukung artis: live, tiket, ikuti). Komposisi tetap 300 × 220 yang
+/// diperkecil (tak pernah diperbesar) agar muat di ruang yang tersedia; disembunyikan bila ruang terlalu pendek.
 class _ArtLive extends StatelessWidget {
   const _ArtLive();
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 300,
-        height: 280,
-        child: Stack(alignment: Alignment.center, children: [
-          Transform.rotate(
-            angle: 0.06,
-            child: Container(
-              width: 270,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Rave.paper, border: Border.all(color: Rave.ink, width: 2), boxShadow: const [BoxShadow(color: Rave.shadow, offset: Offset(6, 6))]),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text('ADMIT ONE · RV-TIX', style: Rave.label(size: 9.5, color: Rave.berry)),
-                const SizedBox(height: 6),
-                Text('SENJA KOLEKTIF', style: Rave.poster(36, color: Rave.ink)),
-                Text('LIVE DI BANDUNG', style: Rave.poster(22, color: Rave.purple)),
-                const SizedBox(height: 10),
-                Container(height: 1.5, color: Rave.ink),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Text('SAB · 20:00 WIB', style: Rave.label(size: 10, color: Rave.ink)),
-                  const Spacer(),
-                  const Icon(Icons.qr_code_2_rounded, color: Rave.ink, size: 34),
-                ]),
-              ]),
-            ),
-          ),
-          Positioned(
-            top: 6,
-            left: 8,
-            child: Transform.rotate(
-              angle: -0.18,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: const Color(0xFFD7263D), border: Border.all(color: Rave.paper, width: 2), boxShadow: Rave.hardShadow),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(width: 8, height: 8, decoration: const BoxDecoration(color: Rave.paper, shape: BoxShape.circle)),
-                  const SizedBox(width: 6),
-                  Text('LIVE', style: Rave.label(size: 12, color: Rave.paper)),
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
+        if (c.maxHeight < 90 || c.maxWidth < 120) return const SizedBox.shrink();
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: MediaQuery.withNoTextScaling(
+              child: SizedBox(
+                width: 300,
+                height: 220,
+                child: Stack(alignment: Alignment.center, children: [
+                  Transform.rotate(
+                    angle: 0.05,
+                    child: Container(
+                      width: 264,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Rave.paper, border: Border.all(color: Rave.ink, width: 2), boxShadow: const [BoxShadow(color: Rave.shadow, offset: Offset(6, 6))]),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Text('ADMIT ONE · RV-TIX', maxLines: 1, overflow: TextOverflow.clip, style: Rave.label(size: 9.5, color: Rave.berry)),
+                        const SizedBox(height: 6),
+                        // Nama lebih panjang dari lebar tiket di font 34 → mengecil rapi, tidak terpotong.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text('BRAP COMPILATION', maxLines: 1, style: Rave.poster(34, color: Rave.ink)),
+                        ),
+                        Text('LIVE DI BANDUNG', maxLines: 1, overflow: TextOverflow.clip, style: Rave.poster(20, color: Rave.purple)),
+                        const SizedBox(height: 10),
+                        Container(height: 1.5, color: Rave.ink),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          Text('SAB · 20:00 WIB', style: Rave.label(size: 10, color: Rave.ink)),
+                          const Spacer(),
+                          const Icon(Icons.qr_code_2_rounded, color: Rave.ink, size: 32),
+                        ]),
+                      ]),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    left: 6,
+                    child: Transform.rotate(
+                      angle: -0.16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(color: const Color(0xFFD7263D), border: Border.all(color: Rave.paper, width: 2), boxShadow: Rave.hardShadow),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(width: 8, height: 8, decoration: const BoxDecoration(color: Rave.paper, shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          Text('LIVE', style: Rave.label(size: 12, color: Rave.paper)),
+                        ]),
+                      ),
+                    ),
+                  ),
                 ]),
               ),
             ),
           ),
-          Positioned(
-            bottom: 4,
-            right: 6,
-            child: Transform.rotate(
-              angle: 0.12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: Rave.hardShadow),
-                child: Text('+ ${App.of(context).s.follow.toUpperCase()}', style: Rave.label(size: 11, color: Rave.ink)),
-              ),
-            ),
-          ),
-        ]),
-      );
+        );
+      });
 }
+
 
 /// Tekstur grain fotokopi (bintik acak, digambar sekali lalu di-cache sebagai lapisan).
 class Grain extends StatelessWidget {

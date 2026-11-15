@@ -6,6 +6,15 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+### Diubah
+- **Onboarding dirombak** — lebih bersih, profesional & responsif (320–480 dp, layar pendek, teks ×1,3): slide pertama
+  memakai **cover album asli** dari katalog (`/v1/catalog/home`, cadangan kotak bermerek saat offline) berkipas di
+  belakang **ilustrasi kaset RAVE** baru (`lib/widgets/cassette.dart`, reel berputar pelan, hormati kurangi-gerakan);
+  sakelar ID/EN bersegmen, CTA tetap di bawah, tiket slide akhir "BRAP COMPILATION". 29 uji baru.
+
+### Diperbaiki
+- **Iklan "setiap lagu" kadang terlewat**: event `complete` ditunggu terkirim (maks 2 dtk) sebelum jeda iklan diminta.
+
 ### Diperbaiki
 - **ANR / "aplikasi tidak merespons" saat gestur kembali dari tepi layar di Beranda**: handler kembali shell memanggil
   `maybePop()` pada route-nya sendiri (`PopScope(canPop: false)`) sehingga dipanggil ulang tanpa henti dan main thread

@@ -343,11 +343,15 @@ class Player extends ChangeNotifier {
     });
     unawaited(_persist());
     if (type != 'progress' || _pending.length >= 4) {
-      unawaited(flush());
+      _lastFlush = flush();
+      unawaited(_lastFlush);
     } else {
       _flushTimer ??= Timer.periodic(const Duration(seconds: 30), (_) => flush());
     }
   }
+
+  /// Pengiriman event terakhir yang dipicu langsung (mis. `complete`) — ditunggu sebelum jeda iklan.
+  Future<void>? _lastFlush;
 
   /// Kirim event tertunda. Offline/5xx/429 → disimpan untuk dikirim lagi; 4xx lain dibuang.
   Future<void> flush() async {
@@ -477,6 +481,9 @@ class Player extends ChangeNotifier {
     _completing = true;
     try {
       _queueEvent('complete');
+      // Lagu harus sudah tercatat server (stream ≥ 30 dtk) sebelum jeda iklan diminta — tanpa ini, lagu yang event
+      // progresnya belum terkirim belum terhitung dan jeda "setiap lagu" terlewat. Maks 2 dtk (offline → lanjut).
+      if (adBreakAllowed) await _lastFlush?.timeout(const Duration(seconds: 2), onTimeout: () {});
       if (repeat == LoopMode.one && current != null) {
         await _adBreak(current!);
         await audio.seek(Duration.zero);
