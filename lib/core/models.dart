@@ -160,13 +160,29 @@ class PlaylistSummary {
   }
 }
 
+class EpisodeEmbed {
+  final String provider, src, kind;
+  final int height;
+  const EpisodeEmbed({required this.provider, required this.src, required this.kind, required this.height});
+  static EpisodeEmbed? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final src = j['src'];
+    // Hanya https — server sudah memvalidasi host; ini pengaman tambahan di klien.
+    if (src is! String || !src.startsWith('https://')) return null;
+    return EpisodeEmbed(provider: '${j['provider'] ?? ''}', src: src, kind: j['kind'] == 'video' ? 'video' : 'audio', height: (j['height'] as num?)?.toInt() ?? 166);
+  }
+}
+
 class Episode {
   final String id, showId, title;
   final String? description, coverUrl;
   final int durationMs;
   final String publishedAt;
   final bool premium;
-  const Episode({required this.id, required this.showId, required this.title, this.description, this.coverUrl, required this.durationMs, required this.publishedAt, this.premium = false});
+  /// Episode embed (iframe platform lain): diputar di [EmbedPlayer], bukan pemutar RAVE.
+  final EpisodeEmbed? embed;
+  bool get isEmbed => embed != null;
+  const Episode({required this.id, required this.showId, required this.title, this.description, this.coverUrl, required this.durationMs, required this.publishedAt, this.premium = false, this.embed});
   factory Episode.fromJson(Json j) => Episode(
         id: j['id'],
         showId: j['show_id'] ?? '',
@@ -176,6 +192,7 @@ class Episode {
         durationMs: (j['duration_ms'] as num?)?.toInt() ?? 0,
         publishedAt: j['published_at'] ?? '',
         premium: j['is_premium'] == true,
+        embed: j['source'] == 'embed' ? EpisodeEmbed.fromJson(j['embed']) : null,
       );
 }
 

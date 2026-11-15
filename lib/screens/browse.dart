@@ -48,6 +48,8 @@ Future<void> refreshAppearance(AppState app) async {
     theme: t is String && const ['dark', 'light', 'system'].contains(t) ? t : 'dark',
     allowUser: allow is bool ? allow : true,
   );
+  await app.settings.setFreeSeek(cfg['streaming.free_seek_enabled'] == true);
+  await app.settings.setAdsAnonymous(cfg['ads.anonymous_enabled'] != false);
 }
 
 Future<bool> platformFlag(AppState app, String key, {bool fallback = true}) async {

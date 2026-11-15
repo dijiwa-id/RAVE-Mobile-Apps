@@ -33,7 +33,11 @@ void openItem(BuildContext context, String kind, String id) {
   // Episode/lagu: langsung diputar.
   final app = App.read(context);
   playablesOf(app, kind, id).then((items) {
-    if (items.isNotEmpty) app.player.playQueue(items);
+    if (items.isNotEmpty) {
+      app.player.playQueue(items);
+    } else if (kind == 'episode' && context.mounted) {
+      openEpisodeShow(context, id);
+    }
   }).catchError((Object e) {
     if (context.mounted) toastError(context, e);
   });
@@ -49,9 +53,26 @@ Future<void> playMedia(BuildContext context, String kind, String id) async {
   if (p.isActive(key)) return p.toggle();
   try {
     final m = await mediaOf(app, kind, id);
-    if (m.items.isEmpty) return;
+    if (m.items.isEmpty) {
+      if (kind == 'episode' && context.mounted) await openEpisodeShow(context, id);
+      return;
+    }
     unawaited(p.playQueue(m.items, 0, kind == 'episode' ? null : key));
     if (context.mounted && kind != 'episode') showToast(context, m.title, title: app.s.nowSpinning, image: m.image, kind: ToastKind.ok, duration: const Duration(milliseconds: 2600));
+  } catch (e) {
+    if (context.mounted) toastError(context, e);
+  }
+}
+
+/// Episode embed: buka halaman acaranya (pemutar platform asal ada di sana) + beri tahu pengguna.
+Future<void> openEpisodeShow(BuildContext context, String episodeId) async {
+  final app = App.read(context);
+  try {
+    final j = await app.api.get('/v1/catalog/episodes/$episodeId');
+    final showId = (j['show_id'] ?? '') as String;
+    if (!context.mounted || showId.isEmpty) return;
+    showToast(context, app.s.embedOnly);
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ShowScreen(id: showId)));
   } catch (e) {
     if (context.mounted) toastError(context, e);
   }

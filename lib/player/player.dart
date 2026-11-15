@@ -207,7 +207,14 @@ class Player extends ChangeNotifier {
   bool shuffle = false;
   LoopMode repeat = LoopMode.off;
   String? error;
-  AdState? ad;
+
+  /// Status iklan berjalan. Mulai/selesai iklan memanggil [notifyListeners] (kunci kontrol); hitungan waktu tiap
+  /// 250 md hanya memperbarui notifier ini agar seluruh UI pemutar tidak ikut dibangun ulang.
+  final adTick = ValueNotifier<AdState?>(null);
+  AdState? get ad => adTick.value;
+
+  /// Naik tiap [_load]; hasil async dari muatan lama yang selesai belakangan dibuang.
+  int _loadGen = 0;
 
   /// Asal antrean (sama dengan web `PlayerState.context`): `release:<id>` · `playlist:<id>` · `artist:<id>` ·
   /// `liked` · `show:<id>`. Tombol putar sebuah koleksi menjadi Jeda bila antrean berasal darinya.
@@ -268,6 +275,7 @@ class Player extends ChangeNotifier {
     var lastNormalize = settings.normalizeVolume;
     settings.addListener(() {
       unawaited(syncFx());
+      _publishState(); // izin geser (streaming.free_seek_enabled) → aksi layar kunci
       if (settings.normalizeVolume != lastNormalize) {
         lastNormalize = settings.normalizeVolume;
         unawaited(_applyLoudness());
@@ -275,6 +283,7 @@ class Player extends ChangeNotifier {
     });
     api.addListener(() {
       unawaited(syncFx());
+      _publishState(); // Gratis ↔ Premium → aksi seek layar kunci
       // Turun ke Gratis / keluar → pilihan kualitas Premium yang tersimpan dikembalikan ke auto.
       if (api.authed) unawaited(settings.enforceFreeQuality(premium: api.user?.premium ?? false));
     });
@@ -303,10 +312,17 @@ class Player extends ChangeNotifier {
     if (audio.playing && _lastTick != null) _playedMs += min(1000, now.difference(_lastTick!).inMilliseconds);
     _lastTick = now;
     final s = session;
-    if (s != null && s.previewOnly && s.previewMs != null && p.inMilliseconds >= s.previewMs!) {
-      audio.pause();
-      error = _s.previewEnded;
-      notifyListeners();
+    if (s != null && s.previewOnly && s.previewMs != null && p.inMilliseconds >= s.previewMs! && !_previewHandled) {
+      final n = _nextIndex();
+      if (anonymousAdsEligible && n != null) {
+        // Sekali per item: satu iklan lalu lanjut ke cuplikan berikutnya.
+        _previewHandled = true;
+        unawaited(_previewAdvance(n));
+      } else {
+        audio.pause();
+        error = _s.previewEnded;
+        notifyListeners();
+      }
     }
     if (_playedMs - _lastProgressAt >= 15000) {
       _lastProgressAt = _playedMs;
@@ -361,9 +377,40 @@ class Player extends ChangeNotifier {
     await _persist();
   }
 
+  /// Cuplikan item ini sudah ditangani (iklan + lanjut) — direset tiap [_load].
+  bool _previewHandled = false;
+
+  /// Pendengar tanpa akun & platform mengizinkan iklan anonim (`ads.anonymous_enabled`).
+  bool get anonymousAdsEligible => api.user == null && settings.adsAnonymous;
+
+  /// Akhir cuplikan 30 dtk (tamu): pesan "cuplikan selesai", satu jeda iklan, lalu cuplikan item [next].
+  /// Antrean yang diubah selama iklan dihormati (mis. pengguna memilih lagu lain → [index] baru dipakai).
+  Future<void> _previewAdvance(int next) async {
+    if (audio.playing) await audio.pause();
+    _messages.add(_s.previewEnded);
+    index = next;
+    final gen = _loadGen;
+    await (debugAdBreak ?? _adBreak)(queue[next]);
+    if (gen != _loadGen || current == null || queue.isEmpty) return; // sudah dimuat lain / di-reset
+    if (index < 0 || index >= queue.length) index = 0;
+    await (debugLoad ?? _load)(queue[index]);
+  }
+
+  /// Uji: pengganti jeda iklan & pemuatan item (tanpa jaringan/kanal platform).
+  @visibleForTesting
+  Future<void> Function(Playable next)? debugAdBreak;
+  @visibleForTesting
+  Future<void> Function(Playable item)? debugLoad;
+
+  /// Uji: picu penanganan akhir cuplikan seolah posisi melewati `preview_ms`.
+  @visibleForTesting
+  void debugPreviewReached() => _onPosition(Duration(milliseconds: session?.previewMs ?? 30000));
+
   /// [resume] > 0: pemulihan item yang sama (stream kedaluwarsa/putus) — lanjut dari posisi terakhir.
   Future<void> _load(Playable item, {Duration resume = Duration.zero}) async {
+    final gen = ++_loadGen;
     final fresh = resume == Duration.zero;
+    _previewHandled = false;
     if (fresh) {
       _recoveries = 0;
       if (current != null && audio.playing && audio.position < duration - const Duration(seconds: 2)) _queueEvent('skip');
@@ -371,6 +418,7 @@ class Player extends ChangeNotifier {
       _lastProgressAt = 0;
     }
     await audio.stop();
+    if (gen != _loadGen) return;
     current = item;
     session = null;
     error = null;
@@ -379,7 +427,7 @@ class Player extends ChangeNotifier {
     _publishItem();
     try {
       final j = await api.post('/v1/playback/sessions', {item.kind == 'track' ? 'track_id' : 'episode_id': item.id, 'quality': settings.requestQualityFor(premium: api.user?.premium ?? false)}) as Json;
-      if (current?.id != item.id) return;
+      if (gen != _loadGen) return;
       session = PlaybackSession.fromJson(j);
       final cap = session!.qualityCapped;
       if (cap != null && cap != 'preview' && !_premiumNotified) {
@@ -389,13 +437,13 @@ class Player extends ChangeNotifier {
       // Lossless diminta tetapi FLAC sedang disiapkan server → beri tahu sekali per lagu.
       if (session!.losslessPending && _losslessNotified.add(item.id)) _messages.add(_s.losslessPending);
       await _applyLoudness();
-      if (current?.id != item.id) return;
+      if (gen != _loadGen) return;
       await _setUrl(api.media(session!.streamUrl)!, resume);
       _publishItem();
       unawaited(audio.play());
       if (fresh) _queueEvent('start');
     } catch (e) {
-      if (current?.id != item.id) return;
+      if (gen != _loadGen) return;
       error = e is ApiError && e.status == 402 ? _s.premiumEpisode : e is ApiError ? e.message : _s.offline;
       buffering = false;
       notifyListeners();
@@ -450,23 +498,30 @@ class Player extends ChangeNotifier {
   }
 
   // ---- Iklan (best-effort: galat apa pun → lanjut memutar) ----
+  /// Jeda iklan berlaku: Premium tidak pernah; akun Gratis selalu; tamu hanya bila `ads.anonymous_enabled`.
+  bool get adBreakAllowed {
+    final u = api.user;
+    return u == null ? settings.adsAnonymous : !u.premium;
+  }
+
   Future<void> _adBreak(Playable next) async {
     final u = api.user;
-    if (u == null || u.premium || _adBusy) return;
+    if (_adBusy || !adBreakAllowed) return;
     _adBusy = true;
     try {
       final j = await api.post('/v1/ads/break', {
         'placement': next.kind == 'episode' ? 'podcast_preroll' : 'between_tracks',
         'content': {'kind': next.kind, 'id': next.id, if (next.premium) 'premium': true, if (next.contentWarning) 'content_warning': true},
       }).timeout(const Duration(seconds: 4)) as Json;
-      final ads = (j['ads'] as List? ?? const []).map((a) => AdCreative.fromJson(a as Json)).toList();
+      var ads = (j['ads'] as List? ?? const []).map((a) => AdCreative.fromJson(a as Json)).toList();
+      if (u == null) ads = ads.take(1).toList(); // tamu: paling banyak satu iklan
       for (var i = 0; i < ads.length; i++) {
         await _playAd(ads[i], i, ads.length);
       }
     } catch (_) {
       // tanpa iklan
     } finally {
-      ad = null;
+      adTick.value = null;
       _adBusy = false;
       notifyListeners();
     }
@@ -475,7 +530,7 @@ class Player extends ChangeNotifier {
   Completer<void>? _adDone;
   Future<void> _playAd(AdCreative a, int i, int total) async {
     _adEvent(a, 'start');
-    ad = AdState(a, i, total, Duration.zero, false);
+    adTick.value = AdState(a, i, total, Duration.zero, false);
     notifyListeners();
     _adDone = Completer();
     final started = DateTime.now();
@@ -499,8 +554,7 @@ class Player extends ChangeNotifier {
       final st = ad;
       if (st == null || _adDone == null || _adDone!.isCompleted) return;
       final el = st.paused ? st.elapsed : (a.type == 'audio' && _adAudio.playing ? _adAudio.position : DateTime.now().difference(started));
-      ad = AdState(a, i, total, el, st.paused);
-      notifyListeners();
+      adTick.value = AdState(a, i, total, el, st.paused);
       if (el.inSeconds >= a.durationS) {
         _adEvent(a, 'complete');
         _adDone!.complete();
@@ -575,14 +629,28 @@ class Player extends ChangeNotifier {
 
   Future<void> prev() async {
     if (_adBusy) return;
-    if (audio.position > const Duration(seconds: 3) || index <= 0) return audio.seek(Duration.zero);
+    // >3 dtk (atau item pertama) → ulang dari awal — itu seek mundur, jadi hanya bila [canSeek].
+    // Gratis tanpa izin geser: ke lagu sebelumnya bila ada; di item pertama tidak terjadi apa-apa.
+    if (canSeek && (index <= 0 || audio.position > const Duration(seconds: 3))) return (debugSeek ?? audio.seek)(Duration.zero);
+    if (index <= 0) return;
     index--;
     await _load(queue[index]);
   }
 
-  Future<void> seek(Duration d) async {
-    if (_adBusy || current == null) return;
-    await audio.seek(d);
+  /// Pendengar boleh menggeser posisi: Premium, atau Gratis bila `streaming.free_seek_enabled` aktif.
+  /// Hanya membatasi seek dari pengguna ([seek]: slider, lirik, notifikasi/layar kunci, ±10 dtk) — seek internal
+  /// (pemulihan stream, ulang satu lagu, kembali ke awal saat antrean habis) tetap jalan.
+  bool get canSeek => Settings.seekAllowed(premium: api.user?.premium == true, freeSeek: settings.freeSeek);
+
+  /// Pengganti `audio.seek` untuk pengujian (tanpa kanal platform just_audio).
+  @visibleForTesting
+  Future<void> Function(Duration)? debugSeek;
+
+  /// Seek dari pengguna. Mengembalikan false bila ditolak (iklan berjalan, belum ada item, atau tier Gratis).
+  Future<bool> seek(Duration d) async {
+    if (_adBusy || current == null || !canSeek) return false;
+    await (debugSeek ?? audio.seek)(d);
+    return true;
   }
 
   Future<void> retry() async {
@@ -641,7 +709,8 @@ class Player extends ChangeNotifier {
     final st = audio.playerState;
     _handler.playbackState.add(PlaybackState(
       controls: [MediaControl.skipToPrevious, st.playing ? MediaControl.pause : MediaControl.play, MediaControl.skipToNext],
-      systemActions: const {MediaAction.seek, MediaAction.seekForward, MediaAction.seekBackward},
+      // Gratis tanpa izin geser: notifikasi/layar kunci tidak menawarkan seek (bilah progres tak bisa digeser).
+      systemActions: canSeek ? const {MediaAction.seek, MediaAction.seekForward, MediaAction.seekBackward} : const {},
       androidCompactActionIndices: const [0, 1, 2],
       processingState: switch (st.processingState) {
         ProcessingState.idle => AudioProcessingState.idle,
@@ -676,6 +745,7 @@ class _Handler extends BaseAudioHandler with SeekHandler {
     return super.stop();
   }
 
+  /// Juga dipakai SeekHandler untuk fastForward/rewind/seekForward — semuanya ditolak untuk Gratis (lihat [Player.canSeek]).
   @override
   Future<void> seek(Duration position) => p.seek(position);
   @override

@@ -154,6 +154,9 @@ class S {
   String get discography => _('Diskografi', 'Discography');
   String get about => _('Tentang', 'About');
   String get episodes => _('Episode', 'Episodes');
+  String embedVia(String p) => _('Diputar lewat $p — tidak dihitung stream RAVE', 'Played via $p — not counted as a RAVE stream');
+  String openIn(String p) => _('Buka di $p', 'Open in $p');
+  String get embedOnly => _('Episode ini diputar di pemutar platform asalnya', 'This episode plays in its original platform player');
   String get premium => 'Premium';
   String get addQueue => _('Tambah ke antrean', 'Add to queue');
   String addedQueue(String t) => _('$t masuk antrean', '$t added to queue');
@@ -248,6 +251,7 @@ class S {
   String get next => _('Berikutnya', 'Next');
   String get repeat => _('Ulangi', 'Repeat');
   String get position => _('Posisi lagu', 'Song position');
+  String get seekPremium => _('Geser lagu khusus Premium', 'Seeking is a Premium feature');
   String get share => _('Bagikan', 'Share');
   String get linkCopied => _('Tautan disalin', 'Link copied');
   String get noQueue => _('Antrean masih kosong. Putar sesuatu, nanti lagu berikutnya muncul di sini.', 'Your queue is empty. Play something and what’s next shows up here.');

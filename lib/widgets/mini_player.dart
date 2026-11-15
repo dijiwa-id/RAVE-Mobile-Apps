@@ -29,7 +29,9 @@ class MiniPlayer extends StatelessWidget {
       builder: (context, _) {
         final p = app.player;
         final ad = p.ad;
-        if (ad != null) return _AdMini(state: ad);
+        if (ad != null) {
+          return ValueListenableBuilder<AdState?>(valueListenable: p.adTick, builder: (_, st, _) => st == null ? const SizedBox.shrink() : _AdMini(state: st));
+        }
         final c = p.current;
         if (c == null) return const SizedBox.shrink();
         return GestureDetector(

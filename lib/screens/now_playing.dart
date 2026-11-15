@@ -247,6 +247,9 @@ class NowPlayingScreen extends StatelessWidget {
       );
 }
 
+/// Info singkat saat akun Gratis mencoba menggeser posisi (slider / ketuk baris lirik).
+void showSeekLocked(BuildContext context) => toast(context, App.of(context).s.seekPremium);
+
 class _Progress extends StatefulWidget {
   const _Progress();
   @override
@@ -258,12 +261,16 @@ class _ProgressState extends State<_Progress> {
   @override
   Widget build(BuildContext context) {
     final p = App.of(context).player;
-    return StreamBuilder<Duration>(
+    // adTick: hitungan iklan diperbarui tanpa notifyListeners pemutar (lihat RavePlayer.adTick).
+    return ValueListenableBuilder<AdState?>(
+      valueListenable: p.adTick,
+      builder: (_, _, _) => StreamBuilder<Duration>(
       stream: p.position,
       builder: (_, snap) {
         final dur = p.duration.inMilliseconds.toDouble();
         final pos = drag ?? (snap.data?.inMilliseconds.toDouble() ?? 0);
         final ad = p.ad;
+        final seekable = p.canSeek;
         final status = ad != null ? 'AD' : p.buffering && p.error == null ? 'BUFFER' : p.playing ? 'PLAY' : p.current != null ? 'PAUSE' : 'STOP';
         return Column(children: [
           DeckLcd(
@@ -280,19 +287,28 @@ class _ProgressState extends State<_Progress> {
           ),
           const SizedBox(height: 10),
           DeckSlider(
+            key: const Key('np-slider'),
             semantic: App.of(context).s.position,
             value: pos,
             max: dur,
-            locked: ad != null,
+            // Gratis tanpa izin geser: hanya tampilan progres; mencoba menggeser → info Premium.
+            locked: ad != null || !seekable,
+            onLocked: ad == null && !seekable ? () => showSeekLocked(context) : null,
             onDrag: (v) => setState(() => drag = v),
             onChanged: (v) => p.seek(Duration(milliseconds: v.round())),
           ),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(fmtDuration(pos.round()), style: Rave.label(size: 10, color: Rave.muted)),
+            if (ad == null && !seekable)
+              Tooltip(
+                message: App.of(context).s.seekPremium,
+                child: const Icon(Icons.lock_rounded, key: Key('np-seek-lock'), size: 12, color: Rave.muted),
+              ),
             Text(fmtDuration(dur.round()), style: Rave.label(size: 10, color: Rave.muted)),
           ]),
         ]);
       },
+    ),
     );
   }
 }
@@ -416,7 +432,7 @@ class _LyricsBodyState extends State<_LyricsBody> {
                         : Rave.paper.withValues(alpha: 0.8);
             return GestureDetector(
               key: _keys.putIfAbsent(i, GlobalKey.new),
-              onTap: widget.lyrics.synced ? () => p.seek(Duration(milliseconds: l.timeMs)) : null,
+              onTap: !widget.lyrics.synced ? null : p.canSeek ? () => p.seek(Duration(milliseconds: l.timeMs)) : () => showSeekLocked(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 child: Text(l.text, style: Rave.body(size: 22, weight: FontWeight.w800, color: color, height: 1.25)),

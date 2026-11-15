@@ -51,7 +51,15 @@ class Api extends ChangeNotifier {
     _access = await _store.read(key: 'access');
     _refresh = await _store.read(key: 'refresh');
     final u = await _store.read(key: 'user');
-    if (u != null) user = Me.fromJson(jsonDecode(u) as Json);
+    if (u != null) {
+      try {
+        user = Me.fromJson(jsonDecode(u) as Json);
+      } catch (_) {
+        // Data tersimpan rusak/format lama → jangan gagalkan start-up; profil dimuat ulang dari server.
+        user = null;
+        await _store.delete(key: 'user');
+      }
+    }
   }
 
   Future<void> _save(Json t) async {

@@ -616,7 +616,7 @@ class _LivePlayerState extends State<LivePlayer> with WidgetsBindingObserver {
   }
 
   Future<void> _heartbeat() async {
-    if (phase != _Phase.playing) return;
+    if (_disposed || phase != _Phase.playing) return;
     try {
       await App.read(context).api.post('/v1/live/streams/${widget.streamId}/heartbeat', {'viewer_id': liveViewerId});
     } catch (_) {}
@@ -665,12 +665,18 @@ class _LivePlayerState extends State<LivePlayer> with WidgetsBindingObserver {
     await c.setVolume(muted ? 0 : 1);
     if (app.player.playing) await app.player.toggle();
     await c.play();
+    // Halaman bisa ditutup selama tiga await di atas → jangan setState / bocorkan controller.
+    if (_disposed) {
+      await c.dispose();
+      return;
+    }
     setState(() {
       _c = c;
       phase = _Phase.playing;
       _backoff = 2;
     });
     await old?.dispose();
+    if (_disposed) return;
     _scheduleRefresh(pb['expires_at'] as String?);
     _heartbeat();
   }
@@ -836,8 +842,9 @@ class _ChatState extends State<_Chat> {
     try {
       final m = LiveChatMessage.fromJson(await app.api.post('/v1/live/streams/${widget.streamId}/chat', {'body': body}) as Json);
       _sentAt = DateTime.now();
+      if (!mounted) return;
       _ctl.clear();
-      if (mounted) setState(() => _msgs.any((x) => x.id == m.id) ? null : _msgs.add(m));
+      setState(() => _msgs.any((x) => x.id == m.id) ? null : _msgs.add(m));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
       });

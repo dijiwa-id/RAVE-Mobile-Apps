@@ -180,6 +180,8 @@ Future<List<Playable>> playablesOf(AppState app, String kind, String id) async {
     case 'episode':
       final j = await api.get('/v1/catalog/episodes/$id');
       final e = Episode.fromJson(j);
+      // Episode embed tidak bisa diputar pemutar RAVE (lihat openEpisodeShow di routes.dart).
+      if (e.isEmbed) return const [];
       return [Playable.fromEpisode(e, (j['show'] as Json?)?['title'] ?? '')];
   }
   return const [];

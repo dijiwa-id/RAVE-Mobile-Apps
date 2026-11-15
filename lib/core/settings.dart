@@ -132,6 +132,29 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// `streaming.free_seek_enabled` terakhir dari platform (bawaan false): akun Gratis boleh menggeser posisi lagu.
+  bool get freeSeek => _p.getBool('freeSeek') ?? false;
+
+  /// Simpan kebijakan geser lagu Gratis (dari `GET /v1/platform/config`); berubah → kontrol pemutar diperbarui.
+  Future<void> setFreeSeek(bool v) async {
+    if (v == freeSeek) return;
+    await _p.setBool('freeSeek', v);
+    notifyListeners();
+  }
+
+  /// `ads.anonymous_enabled` terakhir dari platform (bawaan true): pendengar tanpa akun mendapat satu iklan saat
+  /// cuplikan 30 dtk selesai, lalu lanjut ke cuplikan berikutnya.
+  bool get adsAnonymous => _p.getBool('adsAnonymous') ?? true;
+
+  Future<void> setAdsAnonymous(bool v) async {
+    if (v == adsAnonymous) return;
+    await _p.setBool('adsAnonymous', v);
+    notifyListeners();
+  }
+
+  /// Boleh geser posisi (scrub/±10 dtk/seek layar kunci): Premium, atau Gratis bila platform mengizinkan.
+  static bool seekAllowed({required bool premium, required bool freeSeek}) => premium || freeSeek;
+
   Future<void> setBool(String key, bool v) async {
     await _p.setBool(key, v);
     notifyListeners();

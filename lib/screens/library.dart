@@ -102,8 +102,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       onTap: () => openItem(context, 'release', j['id']),
                     ),
                   ),
-                _ => ListView(physics: raveVerticalPhysics, padding: const EdgeInsets.only(bottom: 16), children: [
-                    _Row(
+                // builder: baris dibangun malas (pustaka bisa berisi ratusan playlist).
+                _ => ListView.builder(
+                    physics: raveVerticalPhysics,
+                    padding: const EdgeInsets.only(bottom: 16),
+                    itemCount: lib.playlists.length + 1,
+                    itemBuilder: (context, i) {
+                      if (i > 0) {
+                        final p = lib.playlists[i - 1];
+                        return _Row(
+                          title: p.title,
+                          subtitle: 'Playlist · ${p.ownerName ?? 'RAVE'}',
+                          image: p.coverUrl,
+                          placeholderIcon: Icons.queue_music_rounded,
+                          playKind: p.trackCount > 0 ? 'playlist' : null,
+                          playId: p.id,
+                          onTap: () => openItem(context, 'playlist', p.id),
+                        );
+                      }
+                      return _Row(
                       title: s.liked,
                       subtitle: s.likedSub(lib.likedCount),
                       art: (size) => Container(
@@ -115,18 +132,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       playKey: 'liked',
                       onPlay: () => _playLiked(context),
                       onTap: () => openItem(context, 'liked', 'liked'),
-                    ),
-                    for (final p in lib.playlists)
-                      _Row(
-                        title: p.title,
-                        subtitle: 'Playlist · ${p.ownerName ?? 'RAVE'}',
-                        image: p.coverUrl,
-                        placeholderIcon: Icons.queue_music_rounded,
-                        playKind: p.trackCount > 0 ? 'playlist' : null,
-                        playId: p.id,
-                        onTap: () => openItem(context, 'playlist', p.id),
-                      ),
-                  ]),
+                    );
+                    },
+                  ),
               },
             ),
             ),
@@ -155,7 +163,7 @@ class _Ids extends StatelessWidget {
       path: path,
       query: {'ids': ids.take(200).join(',')},
       parse: (j) => (j['data'] as List).cast<Json>(),
-      builder: (_, list, _) => ListView(physics: raveVerticalPhysics, padding: const EdgeInsets.only(bottom: 16), children: list.map(row).toList()),
+      builder: (_, list, _) => ListView.builder(physics: raveVerticalPhysics, padding: const EdgeInsets.only(bottom: 16), itemCount: list.length, itemBuilder: (_, i) => row(list[i])),
     );
   }
 }

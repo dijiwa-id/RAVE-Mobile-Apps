@@ -124,11 +124,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       flow.cancel();
       if (done == true) {
         await _afterLogin();
-      } else if (flow.state == SocialPollState.error || flow.state == SocialPollState.expired) {
+      } else if (mounted && (flow.state == SocialPollState.error || flow.state == SocialPollState.expired)) {
         setState(() => _err = flow.message ?? (flow.state == SocialPollState.expired ? s.socialExpired : s.genericError));
       }
     } catch (e) {
-      setState(() => _err = e is _BrowserFail ? s.socialBrowserFailed : friendlyError(s, e));
+      if (mounted) setState(() => _err = e is _BrowserFail ? s.socialBrowserFailed : friendlyError(s, e));
     } finally {
       if (mounted) setState(() => _socialBusy = null);
     }
@@ -139,9 +139,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     setState(() => (_busy = true, _err = null));
     try {
       _dev = await app.api.sendOtp(_email.text);
-      setState(() => _codeStep = true);
+      if (mounted) setState(() => _codeStep = true);
     } catch (e) {
-      setState(() => _err = friendlyError(app.s, e));
+      if (mounted) setState(() => _err = friendlyError(app.s, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -154,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       await app.api.verifyOtp(_email.text, _code.text);
       await _afterLogin();
     } catch (e) {
-      setState(() => _err = friendlyError(app.s, e));
+      if (mounted) setState(() => _err = friendlyError(app.s, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

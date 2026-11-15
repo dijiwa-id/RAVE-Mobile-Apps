@@ -103,7 +103,9 @@ Future<void> addToPlaylist(BuildContext context, Track t) async {
       child: ApiView<List<PlaylistSummary>>(
         path: '/v1/library/playlists',
         parse: (j) => (j['data'] as List).map((x) => PlaylistSummary.fromJson(x as Json)).where((p) => p.ownerId == app.api.user?.id).toList(),
-        builder: (context, list, _) => ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+        // Jangan bayangi `context` luar: setelah Navigator.pop(sheet) konteks lembar sudah unmounted, sedangkan
+        // dialog "playlist baru" & toast memakai konteks pemanggil.
+        builder: (_, list, _) => ListView(padding: const EdgeInsets.only(bottom: 24), children: [
           Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: Text(s.addToPlaylist.toUpperCase(), style: Rave.poster(26))),
           ListTile(
             leading: Container(width: 48, height: 48, color: context.rc.isLight ? context.rc.hover : Rave.raised, child: Icon(Icons.add_rounded, color: context.rc.accent)),

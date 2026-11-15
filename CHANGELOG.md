@@ -6,7 +6,23 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+### Diubah
+- **Tier Gratis tidak bisa menggeser lagu** (kebijakan server `streaming.free_seek_enabled`, default mati): progres hanya
+  tampilan dengan ikon kunci + pesan "Geser lagu khusus Premium"; kontrol layar kunci/notifikasi & ketuk lirik juga diabaikan. "Sebelumnya" tidak mengulang
+  lagu dari awal — langsung ke lagu sebelumnya. Premium tidak berubah.
+- **Iklan untuk tamu**: setelah pratinjau 30 detik berakhir, pengguna yang belum masuk menerima satu iklan lalu lanjut ke
+  pratinjau berikutnya (`ads.anonymous_enabled`; butuh server dengan migrasi ads `003_anonymous_impressions`).
+- **Stabilitas**: hasil muat lagu lama dibuang (generasi muat), penjaga `mounted`/disposed di Live & Masuk, hitungan
+  iklan memakai notifier terpisah (UI pemutar tidak dibangun ulang tiap 250 md), daftar Koleksi dibangun malas,
+  profil tersimpan yang rusak tidak lagi menggagalkan start-up.
+
+## [0.2.5] - 2026-11-15
+
 ### Ditambahkan
+- **Episode podcast embed** (Spotify, YouTube, Apple Podcasts, SoundCloud, Spotify for Creators) diputar **di dalam
+  aplikasi** lewat WebView (`webview_flutter`, `lib/widgets/embed_player.dart`) + tombol "Buka di …" ke aplikasi
+  platform asal. Tautan keluar dari host embed dibuka di aplikasi eksternal. Episode embed tidak masuk antrean pemutar
+  RAVE; memutarnya dari kartu/pencarian membuka halaman acara.
 - **Beranda lebih lega & jelas:** bilah atas kini berisi **ikon V RAVE putih tanpa kotak ungu** (vektor dari
   `icon mobile.svg`, tinta di tema terang) sejajar tombol Masuk/Daftar (tamu) atau Pengaturan; hero (RAVE · Tamu,
   sapaan, catatan tamu) diturunkan ke bawah bilah atas sehingga tidak lagi menumpuk dengan tombol masuk. Tombol

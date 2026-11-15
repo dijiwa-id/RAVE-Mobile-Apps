@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/collection.dart';
 import '../widgets/common.dart';
+import '../widgets/embed_player.dart';
 import '../widgets/motion.dart';
 
 class ShowScreen extends StatelessWidget {
@@ -24,9 +25,15 @@ class ShowScreen extends StatelessWidget {
         listenable: app.player,
         builder: (context, _) {
           final p = app.player;
-          final eps = sh.episodes.map((e) => Playable.fromEpisode(e, sh.title, contentWarning: sh.contentWarning)).toList();
+          // Episode embed diputar di WebView platform asal — tidak masuk antrean pemutar RAVE.
+          final eps = sh.episodes.where((e) => !e.isEmbed).map((e) => Playable.fromEpisode(e, sh.title, contentWarning: sh.contentWarning)).toList();
           final key = 'show:${sh.id}';
-          void playAt(int i) => p.current?.id == eps[i].id ? p.toggle() : p.playQueue(eps, i, key);
+          void playEp(String id) {
+            final i = eps.indexWhere((x) => x.id == id);
+            if (i < 0) return;
+            p.current?.id == id ? p.toggle() : p.playQueue(eps, i, key);
+          }
+          void playAt(int i) => playEp(eps[i].id);
           return CollectionPage(
             kind: s.kind('show'),
             title: sh.title,
@@ -52,7 +59,7 @@ class ShowScreen extends StatelessWidget {
                   final e = sh.episodes[i];
                   final cur = p.current?.id == e.id;
                   return InkWell(
-                    onTap: () => playAt(i),
+                    onTap: e.isEmbed ? null : () => playEp(e.id),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                       child: Row(children: [
@@ -67,12 +74,18 @@ class ShowScreen extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(e.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: Rave.body(size: 13, color: context.rc.muted)),
                               ),
+                            if (e.embed != null) Padding(padding: const EdgeInsets.only(top: 10), child: EmbedPlayer(embed: e.embed!, title: e.title)),
                             const SizedBox(height: 6),
-                            Eyebrow('${e.publishedAt.length >= 10 ? e.publishedAt.substring(0, 10) : ''} · ${fmtTotal(e.durationMs, app.settings.locale == 'id')}', color: context.rc.subtle, size: 9.5),
+                            Eyebrow(
+                                '${e.publishedAt.length >= 10 ? e.publishedAt.substring(0, 10) : ''}${e.durationMs > 0 ? ' · ${fmtTotal(e.durationMs, app.settings.locale == 'id')}' : ''}',
+                                color: context.rc.subtle,
+                                size: 9.5),
                           ]),
                         ),
-                        const SizedBox(width: 10),
-                        PlayFab(size: 40, playKey: 'episode:${e.id}', semantic: '${s.play} ${e.title}', onPlay: () => playAt(i)),
+                        if (!e.isEmbed) ...[
+                          const SizedBox(width: 10),
+                          PlayFab(size: 40, playKey: 'episode:${e.id}', semantic: '${s.play} ${e.title}', onPlay: () => playEp(e.id)),
+                        ],
                       ]),
                     ),
                   );

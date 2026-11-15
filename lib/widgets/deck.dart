@@ -331,11 +331,14 @@ class _Scanlines extends CustomPainter {
 /// Slider alur: lintasan cekung gelap, isian mustard, thumb kotak berbevel. Nilai ditahan selama digeser,
 /// dikirim saat dilepas (satu seek, bukan puluhan permintaan range).
 class DeckSlider extends StatefulWidget {
-  const DeckSlider({super.key, required this.value, required this.max, required this.onChanged, this.locked = false, this.onDrag, this.semantic = ''});
+  const DeckSlider({super.key, required this.value, required this.max, required this.onChanged, this.locked = false, this.onDrag, this.onLocked, this.semantic = ''});
   final double value, max;
   final ValueChanged<double> onChanged;
   final ValueChanged<double?>? onDrag;
   final bool locked;
+
+  /// Dipanggil saat pengguna mencoba menggeser/mengetuk slider yang [locked] (mis. info "khusus Premium").
+  final VoidCallback? onLocked;
   final String semantic;
   @override
   State<DeckSlider> createState() => _DeckSliderState();
@@ -360,49 +363,59 @@ class _DeckSliderState extends State<DeckSlider> {
       value: '${(pct * 100).round()}%',
       child: LayoutBuilder(builder: (context, box) {
         final w = box.maxWidth;
+        final hint = widget.onLocked;
+        if (widget.locked) {
+          // Hanya tampilan: progres tetap jalan, gestur geser/ketuk tidak mengubah posisi.
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: hint == null ? null : (_) => hint(),
+            onTapUp: hint == null ? null : (_) => hint(),
+            child: _track(w, pct),
+          );
+        }
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: widget.locked ? null : (d) => _set(_at(d.localPosition, w)),
-          onHorizontalDragUpdate: widget.locked ? null : (d) => _set(_at(d.localPosition, w)),
-          onHorizontalDragEnd: widget.locked
-              ? null
-              : (_) {
-                  if (drag != null) widget.onChanged(drag!);
-                  _set(null);
-                },
-          onTapUp: widget.locked ? null : (d) => widget.onChanged(_at(d.localPosition, w)),
-          child: SizedBox(
-            width: w,
-            height: 32,
-            child: Stack(alignment: Alignment.centerLeft, clipBehavior: Clip.none, children: [
-              Container(
-                height: 8,
-                padding: const EdgeInsets.all(1),
-                decoration: const BoxDecoration(color: Color(0xFF0A090C)),
-                foregroundDecoration: const _Bevel(light: Colors.black, dark: Color(0xFF3A3842)),
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: pct,
-                  child: ColoredBox(color: drag != null ? Rave.mustard : Rave.mustard.withValues(alpha: 0.85)),
-                ),
-              ),
-              Positioned(
-                // Thumb tetap di dalam lintasan → tepi slider yang terlihat = tepi isi.
-                left: (w * pct - 12).clamp(0.0, max(0.0, w - 24)),
-                child: Container(
-                  width: 24,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFD8D5DE), Color(0xFF9D99A6)]),
-                    border: Border.all(color: Deck.edge),
-                  ),
-                  foregroundDecoration: const _Bevel(light: Colors.white, dark: Color(0xFF4A4752)),
-                ),
-              ),
-            ]),
-          ),
+          onHorizontalDragStart: (d) => _set(_at(d.localPosition, w)),
+          onHorizontalDragUpdate: (d) => _set(_at(d.localPosition, w)),
+          onHorizontalDragEnd: (_) {
+            if (drag != null) widget.onChanged(drag!);
+            _set(null);
+          },
+          onTapUp: (d) => widget.onChanged(_at(d.localPosition, w)),
+          child: _track(w, pct),
         );
       }),
     );
   }
+
+  Widget _track(double w, double pct) => SizedBox(
+        width: w,
+        height: 32,
+        child: Stack(alignment: Alignment.centerLeft, clipBehavior: Clip.none, children: [
+          Container(
+            height: 8,
+            padding: const EdgeInsets.all(1),
+            decoration: const BoxDecoration(color: Color(0xFF0A090C)),
+            foregroundDecoration: const _Bevel(light: Colors.black, dark: Color(0xFF3A3842)),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: pct,
+              child: ColoredBox(color: drag != null ? Rave.mustard : Rave.mustard.withValues(alpha: 0.85)),
+            ),
+          ),
+          Positioned(
+            // Thumb tetap di dalam lintasan → tepi slider yang terlihat = tepi isi.
+            left: (w * pct - 12).clamp(0.0, max(0.0, w - 24)),
+            child: Container(
+              width: 24,
+              height: 16,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFD8D5DE), Color(0xFF9D99A6)]),
+                border: Border.all(color: Deck.edge),
+              ),
+              foregroundDecoration: const _Bevel(light: Colors.white, dark: Color(0xFF4A4752)),
+            ),
+          ),
+        ]),
+      );
 }
