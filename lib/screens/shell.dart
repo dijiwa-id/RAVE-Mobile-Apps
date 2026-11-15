@@ -107,7 +107,11 @@ class _ShellState extends State<Shell> {
         } else if (tab != 0) {
           setState(() => tab = 0);
         } else {
-          Navigator.of(context).maybePop();
+          // Akar Beranda. JANGAN maybePop(): route ini sendiri ber-canPop:false → maybePop memanggil handler ini lagi
+          // tanpa henti (loop microtask → main thread 100% → ANR saat gestur kembali dari tepi layar).
+          // pop() melewati PopScope; tanpa route di bawahnya → keluar ke launcher seperti aplikasi Android biasa.
+          final root = Navigator.of(context);
+          root.canPop() ? root.pop() : SystemNavigator.pop();
         }
       },
       child: Scaffold(

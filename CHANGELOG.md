@@ -6,6 +6,11 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+### Diperbaiki
+- **ANR / "aplikasi tidak merespons" saat gestur kembali dari tepi layar di Beranda**: handler kembali shell memanggil
+  `maybePop()` pada route-nya sendiri (`PopScope(canPop: false)`) sehingga dipanggil ulang tanpa henti dan main thread
+  macet 100%. Kini keluar ke launcher (`SystemNavigator.pop`). Uji regresi `test/back_gesture_test.dart`.
+
 ### Diubah
 - **Tier Gratis tidak bisa menggeser lagu** (kebijakan server `streaming.free_seek_enabled`, default mati): progres hanya
   tampilan dengan ikon kunci + pesan "Geser lagu khusus Premium"; kontrol layar kunci/notifikasi & ketuk lirik juga diabaikan. "Sebelumnya" tidak mengulang
