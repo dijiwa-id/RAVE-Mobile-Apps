@@ -11,6 +11,7 @@ import 'package:rave_mobile/screens/library.dart';
 import 'package:rave_mobile/screens/now_playing.dart';
 import 'package:rave_mobile/widgets/mini_player.dart';
 import 'package:rave_mobile/screens/settings.dart';
+import 'package:rave_mobile/widgets/brand_marks.dart';
 import 'package:rave_mobile/widgets/common.dart';
 import 'package:rave_mobile/widgets/getting_started.dart';
 import 'package:rave_mobile/widgets/collection.dart';
@@ -149,6 +150,17 @@ void _suite() {
       expect(find.text('MASUK'), findsOneWidget);
       expect(find.text('DAFTAR'), findsOneWidget);
       expect(find.byIcon(Icons.settings_outlined), findsNothing);
+    });
+
+    testWidgets('Beranda: ikon V sejajar Masuk, hero di bawah bilah atas (${w.round()} dp)', (t) async {
+      final app = await _state();
+      await app.cache.load('/v1/catalog/home?', () async => HomeData.fromJson(const {'quick_picks': [], 'sections': []}));
+      await _pump(t, app, const HomeScreen(), width: w);
+      final mark = t.getRect(find.byType(RaveMark));
+      final login = t.getRect(find.text('MASUK'));
+      final hero = t.getRect(find.textContaining('RAVE · '));
+      expect((mark.center.dy - login.center.dy).abs(), lessThan(1.5), reason: 'ikon & tombol Masuk satu baris');
+      expect(hero.top, greaterThan(login.bottom + 12), reason: 'hero tidak menumpuk dengan tombol Masuk');
     });
   }
 

@@ -7,6 +7,19 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 ## [Unreleased]
 
 ### Ditambahkan
+- **Beranda lebih lega & jelas:** bilah atas kini berisi **ikon V RAVE putih tanpa kotak ungu** (vektor dari
+  `icon mobile.svg`, tinta di tema terang) sejajar tombol Masuk/Daftar (tamu) atau Pengaturan; hero (RAVE · Tamu,
+  sapaan, catatan tamu) diturunkan ke bawah bilah atas sehingga tidak lagi menumpuk dengan tombol masuk. Tombol
+  Masuk/Daftar sedikit lebih besar (target sentuh). Uji tata letak memastikan ikon satu baris dengan Masuk & hero
+  di bawahnya (360/412 dp).
+- **Logo Google asli** (4 warna resmi) di tombol login sosial — digambar sebagai vektor (`lib/widgets/brand_marks.dart`,
+  parser path SVG kecil tanpa paket tambahan).
+- **Login sosial (Google, Apple, Facebook)** di layar Masuk — hanya provider yang diaktifkan server yang tampil
+  (`GET /v1/auth/oauth/providers`; server development menambah **Simulasi (dev)**). Alur aplikasi: `POST
+  /v1/auth/oauth/:provider/app` → browser sistem membuka halaman konfirmasi berkode → lembar tunggu menampilkan kode
+  yang sama ("Pastikan kode sama dengan di browser", Buka browser lagi, Batal) sambil polling `POST
+  /v1/auth/oauth/poll` (428 menunggu · 200 token · 400 gagal · 410 kedaluwarsa). Polling dijeda saat aplikasi di
+  latar belakang dan langsung memeriksa saat kembali; sesi disimpan sama seperti login OTP (`lib/core/social_login.dart`, tes `test/social_login_test.dart`).
 - **Beranda setara web:** chip **Semua · Musik · Artis · Podcast · Live · Event** (mengikuti modul platform) yang
   menyaring bagian beranda; banner permanen **Mulai di RAVE** (6 langkah: putar → Cari, simpan → Disukai, mixtape →
   Pustaka, ikuti artis → chip Artis, nonton live → Live, datang ke gig → Event) dengan warna RAVE per langkah,

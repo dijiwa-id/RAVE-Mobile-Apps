@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_state.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../widgets/brand_marks.dart';
 import '../widgets/common.dart';
 import '../widgets/getting_started.dart';
 import '../widgets/home_shelves.dart';
@@ -108,19 +109,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         )
                       : const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Rave.purple, Color(0x662A1233), Rave.canvas]),
                 ),
-                padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 14, 8, 10),
+                padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 10, 12, 14),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Expanded(child: Eyebrow('RAVE · ${app.api.authed ? s.home : s.guest}', color: rc.accent)),
-                    // Tamu: hanya Masuk & Daftar (tanpa pengaturan — sama dengan web); masuk: ikon Pengaturan.
-                    if (!app.api.authed) ...[
-                      _SignupChip(onTap: () => openLogin(context), label: s.logIn, ghost: true),
-                      const SizedBox(width: 8),
-                      _SignupChip(onTap: () => openLogin(context, signUp: true), label: s.signUp),
-                      const SizedBox(width: 8),
-                    ] else
-                      IconButton(tooltip: s.settings, onPressed: () => openItem(context, 'settings', ''), icon: const Icon(Icons.settings_outlined)),
-                  ]),
+                  // Bilah atas: ikon V RAVE (putih, tanpa kotak) sejajar tombol Masuk/Daftar (tamu) atau Pengaturan.
+                  SizedBox(
+                    height: 44,
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                      RaveMark(size: 34, color: rc.isLight ? Rave.ink : Colors.white),
+                      const Spacer(),
+                      // Tamu: hanya Masuk & Daftar (tanpa pengaturan — sama dengan web); masuk: ikon Pengaturan.
+                      if (!app.api.authed) ...[
+                        _SignupChip(onTap: () => openLogin(context), label: s.logIn, ghost: true),
+                        const SizedBox(width: 8),
+                        _SignupChip(onTap: () => openLogin(context, signUp: true), label: s.signUp),
+                      ] else
+                        IconButton(tooltip: s.settings, onPressed: () => openItem(context, 'settings', ''), icon: const Icon(Icons.settings_outlined)),
+                    ]),
+                  ),
+                  // Hero diturunkan di bawah bilah atas (tidak lagi berbagi baris dengan tombol masuk).
+                  const SizedBox(height: 22),
+                  Eyebrow('RAVE · ${app.api.authed ? s.home : s.guest}', color: rc.accent),
+                  const SizedBox(height: 6),
                   Text('${s.greeting(DateTime.now().hour)}${name == null || name.isEmpty ? '' : ', $name'}'.toUpperCase(), style: Rave.poster(40)),
                   if (!app.api.authed) ...[
                     const SizedBox(height: 10),
@@ -235,7 +244,7 @@ class _SignupChip extends StatelessWidget {
         child: GestureDetector(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: ghost
                 ? BoxDecoration(border: Border.all(color: context.rc.text, width: 2))
                 : BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: context.rc.hard()),

@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'social_login.dart';
 import 'version.dart';
 import 'settings.dart';
 
@@ -40,6 +41,10 @@ class Api extends ChangeNotifier {
   Me? user;
 
   bool get authed => _access != null;
+
+  /// Uji tata letak keadaan masuk tanpa jaringan/secure storage.
+  @visibleForTesting
+  set debugAccessToken(String? v) => _access = v;
   String get base => settings.server;
 
   Future<void> restore() async {
@@ -159,6 +164,34 @@ class Api extends ChangeNotifier {
     final r = await request<Json>('/v1/auth/token', method: 'POST', body: {'grant_type': 'otp', 'destination': email.trim(), 'code': code.trim()}, auth: false);
     await _save(r);
   }
+
+  // ---- Login sosial (Google/Apple/Facebook; `dev` = simulasi di server development) ----
+  Future<List<String>> socialProviders() async {
+    final r = await request<Json>('/v1/auth/oauth/providers', auth: false, timeout: const Duration(seconds: 8));
+    final list = (r['providers'] as List? ?? const []).whereType<String>().toList();
+    return [for (final p in const ['google', 'apple', 'facebook', 'dev']) if (list.contains(p)) p];
+  }
+
+  Future<SocialLaunch> startSocial(String provider) async {
+    final r = await request<Json>('/v1/auth/oauth/$provider/app', method: 'POST', body: {'client': 'mobile'}, auth: false);
+    return SocialLaunch.fromJson(provider, r);
+  }
+
+  /// URL yang dibuka di browser sistem (relatif ke server yang dipakai aplikasi — berfungsi juga di IP LAN).
+  Uri socialStartUrl(SocialLaunch l) => Uri.parse('$base${l.startPath}');
+
+  /// Satu kali polling. OfflineError diteruskan (flow mencoba lagi di tick berikutnya).
+  Future<SocialPollResult> pollSocial(String pollToken) async {
+    try {
+      final r = await request<Json>('/v1/auth/oauth/poll', method: 'POST', body: {'poll_token': pollToken}, auth: false, timeout: const Duration(seconds: 10));
+      return socialPollFromResponse(200, r);
+    } on ApiError catch (e) {
+      return socialPollFromResponse(e.status, e.problem);
+    }
+  }
+
+  /// Simpan sesi dari token hasil login sosial (sama dengan login OTP).
+  Future<void> saveSession(Json tokens) => _save(tokens);
 
   Future<void> logout() async {
     final rt = _refresh;

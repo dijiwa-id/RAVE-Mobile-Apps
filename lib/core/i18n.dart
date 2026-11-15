@@ -96,6 +96,17 @@ class S {
   String get changeEmail => _('Ganti email', 'Change email');
   String get resend => _('Kirim ulang', 'Resend');
   String devCode(String c) => _('Kode dev: $c', 'Dev code: $c');
+  // Login sosial (alur aplikasi: browser sistem + kode pencocokan)
+  String get orContinueWith => _('atau lanjutkan dengan', 'or continue with');
+  String continueWith(String p) => _('Lanjutkan dengan $p', 'Continue with $p');
+  String get devProvider => _('Simulasi (dev)', 'Simulated (dev)');
+  String socialWaitTitle(String p) => _('Masuk dengan $p', 'Sign in with $p');
+  String get socialWaitBody => _('Selesaikan di browser yang baru terbuka, lalu kembali ke sini — kami lanjutkan otomatis.', 'Finish in the browser that just opened, then come back — we’ll pick it up automatically.');
+  String get socialMatchCode => _('Pastikan kode sama dengan di browser', 'Make sure the code matches the browser');
+  String get socialReopen => _('Buka browser lagi', 'Open browser again');
+  String get socialWaiting => _('Menunggu login di browser…', 'Waiting for sign-in in the browser…');
+  String get socialExpired => _('Sesi masuk kedaluwarsa. Coba lagi.', 'Sign-in session expired. Try again.');
+  String get socialBrowserFailed => _('Browser tidak bisa dibuka di perangkat ini.', 'Couldn’t open a browser on this device.');
   String get server => 'Server';
   // Onboarding
   String get ob1Title => _('Suara skena independen', 'The sound of the indie scene');
