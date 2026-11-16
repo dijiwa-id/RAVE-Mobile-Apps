@@ -11,6 +11,8 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
   memakai **cover album asli** dari katalog (`/v1/catalog/home`, cadangan kotak bermerek saat offline) berkipas di
   belakang **ilustrasi kaset RAVE** baru (`lib/widgets/cassette.dart`, reel berputar pelan, hormati kurangi-gerakan);
   sakelar ID/EN bersegmen, CTA tetap di bawah, tiket slide akhir "BRAP COMPILATION". 29 uji baru.
+- **Bilah atas Beranda tamu**: tombol Masuk & Daftar diganti satu ikon Pengaturan yang membuka lembar berisi
+  Masuk, Daftar, dan alamat Server (`showGuestMenu`). Pengguna yang masuk tetap langsung ke layar Pengaturan.
 
 ### Diperbaiki
 - **Iklan "setiap lagu" kadang terlewat**: event `complete` ditunggu terkirim (maks 2 dtk) sebelum jeda iklan diminta.

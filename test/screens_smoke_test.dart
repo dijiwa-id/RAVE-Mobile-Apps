@@ -143,24 +143,23 @@ void _suite() {
       expect(find.text('Normalisasi volume'), findsOneWidget);
     });
 
-    testWidgets('Beranda tamu: Masuk + Daftar, tanpa ikon Pengaturan (${w.round()} dp)', (t) async {
+    testWidgets('Beranda tamu: satu ikon Pengaturan → lembar Masuk/Daftar + Server (${w.round()} dp)', (t) async {
       final app = await _state();
       await app.cache.load('/v1/catalog/home?', () async => HomeData.fromJson(const {'quick_picks': [], 'sections': []}));
       await _pump(t, app, const HomeScreen(), width: w);
+      expect(find.text('MASUK'), findsNothing);
+      expect(find.text('DAFTAR'), findsNothing);
+      expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+      final mark = t.getRect(find.byType(RaveMark));
+      final gear = t.getRect(find.byIcon(Icons.settings_outlined));
+      final hero = t.getRect(find.textContaining('RAVE · '));
+      expect((mark.center.dy - gear.center.dy).abs(), lessThan(1.5), reason: 'ikon V & Pengaturan satu baris');
+      expect(hero.top, greaterThan(gear.bottom + 12), reason: 'hero di bawah bilah atas');
+      await t.tap(find.byIcon(Icons.settings_outlined));
+      await t.pumpAndSettle();
       expect(find.text('MASUK'), findsOneWidget);
       expect(find.text('DAFTAR'), findsOneWidget);
-      expect(find.byIcon(Icons.settings_outlined), findsNothing);
-    });
-
-    testWidgets('Beranda: ikon V sejajar Masuk, hero di bawah bilah atas (${w.round()} dp)', (t) async {
-      final app = await _state();
-      await app.cache.load('/v1/catalog/home?', () async => HomeData.fromJson(const {'quick_picks': [], 'sections': []}));
-      await _pump(t, app, const HomeScreen(), width: w);
-      final mark = t.getRect(find.byType(RaveMark));
-      final login = t.getRect(find.text('MASUK'));
-      final hero = t.getRect(find.textContaining('RAVE · '));
-      expect((mark.center.dy - login.center.dy).abs(), lessThan(1.5), reason: 'ikon & tombol Masuk satu baris');
-      expect(hero.top, greaterThan(login.bottom + 12), reason: 'hero tidak menumpuk dengan tombol Masuk');
+      expect(find.text('SERVER'), findsOneWidget);
     });
   }
 

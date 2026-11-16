@@ -5,6 +5,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/brand_marks.dart';
 import '../widgets/common.dart';
+import '../widgets/connection.dart';
 import '../widgets/getting_started.dart';
 import '../widgets/home_shelves.dart';
 import '../widgets/links.dart';
@@ -111,19 +112,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 10, 12, 14),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Bilah atas: ikon V RAVE (putih, tanpa kotak) sejajar tombol Masuk/Daftar (tamu) atau Pengaturan.
+                  // Bilah atas: ikon V RAVE (putih, tanpa kotak) sejajar satu ikon Pengaturan. Tamu: ikon membuka lembar
+                  // Masuk / Daftar + Server; masuk: membuka layar Pengaturan.
                   SizedBox(
                     height: 44,
                     child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                       RaveMark(size: 34, color: rc.isLight ? Rave.ink : Colors.white),
                       const Spacer(),
-                      // Tamu: hanya Masuk & Daftar (tanpa pengaturan — sama dengan web); masuk: ikon Pengaturan.
-                      if (!app.api.authed) ...[
-                        _SignupChip(onTap: () => openLogin(context), label: s.logIn, ghost: true),
-                        const SizedBox(width: 8),
-                        _SignupChip(onTap: () => openLogin(context, signUp: true), label: s.signUp),
-                      ] else
-                        IconButton(tooltip: s.settings, onPressed: () => openItem(context, 'settings', ''), icon: const Icon(Icons.settings_outlined)),
+                      IconButton(
+                        tooltip: s.settings,
+                        onPressed: () => app.api.authed ? openItem(context, 'settings', '') : showGuestMenu(context),
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
                     ]),
                   ),
                   // Hero diturunkan di bawah bilah atas (tidak lagi berbagi baris dengan tombol masuk).
@@ -231,27 +231,38 @@ class _QuickPicks extends StatelessWidget {
   }
 }
 
-/// Tombol "Daftar gratis" kecil: mustard, teks ink, bayangan sablon.
-class _SignupChip extends StatelessWidget {
-  const _SignupChip({required this.onTap, required this.label, this.ghost = false});
-  final VoidCallback onTap;
-  final String label;
-  /// Varian garis (Masuk) di samping tombol mustard (Daftar).
-  final bool ghost;
-  @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: ghost
-                ? BoxDecoration(border: Border.all(color: context.rc.text, width: 2))
-                : BoxDecoration(color: Rave.mustard, border: Border.all(color: Rave.ink, width: 2), boxShadow: context.rc.hard()),
-            child: Text(label.toUpperCase(), style: Rave.label(size: 10, color: ghost ? context.rc.text : Rave.ink)),
-          ),
-        ),
-      );
+/// Lembar Pengaturan tamu (ikon roda gigi Beranda): Masuk & Daftar, lalu alamat Server.
+Future<void> showGuestMenu(BuildContext context) {
+  final s = App.read(context).s;
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheet) => SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(sheet).bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(s.settings.toUpperCase(), style: Rave.poster(28)),
+          const SizedBox(height: 6),
+          Text(s.guestBody, style: Rave.body(size: 13, color: sheet.rc.muted)),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: OutlineButton(label: s.logIn, onTap: () { Navigator.pop(sheet); openLogin(context); })),
+            const SizedBox(width: 10),
+            Expanded(child: PrimaryButton(label: s.signUp, onTap: () { Navigator.pop(sheet); openLogin(context, signUp: true); })),
+          ]),
+          const SizedBox(height: 22),
+          Divider(height: 1, color: sheet.rc.muted.withValues(alpha: 0.3)),
+          const SizedBox(height: 16),
+          Text(s.server.toUpperCase(), style: Rave.label(size: 12, color: sheet.rc.text)),
+          const SizedBox(height: 4),
+          Text(s.serverHint, style: Rave.body(size: 12, color: sheet.rc.muted)),
+          const SizedBox(height: 10),
+          ServerEditor(onSaved: () => Navigator.pop(sheet)),
+        ]),
+      ),
+    ),
+  );
 }
 
 /// Bagian beranda masuk bertahap (pudar + geser), sekali per chip — tidak diulang saat dibangun ulang.
