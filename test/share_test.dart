@@ -214,7 +214,7 @@ void main() {
     });
   });
 
-  testWidgets('kartu cerita: PNG 1080×1920 (dengan & tanpa sampul)', (t) async {
+  testWidgets('kartu cerita: PNG 1080×1920 (dengan & tanpa sampul, logo asli & cadangan)', (t) async {
     await t.runAsync(() async {
       for (final (family, files) in [
         ('Bricolage', ['assets/fonts/BricolageGrotesque-Variable.ttf']),
@@ -235,8 +235,9 @@ void main() {
       );
       final cover = await rec.endRecording().toImage(64, 64);
       final share = TrackShare.fromJson(_payload);
-      for (final (name, img) in [('cover', cover), ('nocover', null)]) {
-        final png = await renderStoryCard(share, tagline: 'Sedang diputar di RAVE', cover: img);
+      expect(await loadRaveLogo(), isNotNull, reason: 'logo RAVE asli harus termuat dari aset');
+      for (final (name, img, logo) in [('cover', cover, true), ('nocover', null, true), ('nologo', cover, false)]) {
+        final png = await renderStoryCard(share, tagline: 'Sedang diputar di RAVE', cover: img, withLogo: logo);
         expect(png.sublist(1, 4), 'PNG'.codeUnits);
         final codec = await ui.instantiateImageCodec(png);
         final frame = await codec.getNextFrame();

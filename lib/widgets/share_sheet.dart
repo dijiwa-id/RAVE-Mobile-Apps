@@ -402,9 +402,12 @@ Future<ui.Image?> loadShareCover(Api api, String? url, {http.Client? client}) as
 
 /// Kartu cerita sebagai widget (dirender di luar layar oleh [renderStoryCard]; tata letak sama dengan web storyCard.ts).
 class StoryCard extends StatelessWidget {
-  const StoryCard({super.key, required this.title, required this.artist, required this.link, required this.tagline, this.cover});
+  const StoryCard({super.key, required this.title, required this.artist, required this.link, required this.tagline, this.cover, this.logo});
   final String title, artist, link, tagline;
   final ui.Image? cover;
+
+  /// Logo RAVE asli (`assets/brand/rave-logo.webp`: huruf putih + piringan ungu). Null → cadangan ikon V + teks.
+  final ui.Image? logo;
 
   @override
   Widget build(BuildContext context) {
@@ -473,16 +476,26 @@ class StoryCard extends StatelessWidget {
             Text(artist, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(size: 46, weight: FontWeight.w600, color: const Color(0xBFEDEDED))),
           ]),
         ),
-        Positioned(
-          left: 80,
-          right: 80,
-          top: 1590,
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const RaveMark(size: 150, color: Rave.paper),
-            const SizedBox(width: 18),
-            Text('RAVE', style: Rave.poster(124, color: Rave.paper)),
-          ]),
-        ),
+        // Merek: logo asli selebar 400 px, tepi bawah di y=1690 (±55 px di atas pil tautan) — sama dengan web storyCard.ts.
+        if (logo != null)
+          Positioned(
+            left: (w - 400) / 2,
+            top: 1690 - 400 * logo!.height / logo!.width,
+            width: 400,
+            height: 400 * logo!.height / logo!.width,
+            child: RawImage(image: logo, fit: BoxFit.contain, filterQuality: FilterQuality.high),
+          )
+        else
+          Positioned(
+            left: 80,
+            right: 80,
+            top: 1590,
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const RaveMark(size: 150, color: Rave.paper),
+              const SizedBox(width: 18),
+              Text('RAVE', style: Rave.poster(124, color: Rave.paper)),
+            ]),
+          ),
         Positioned(
           left: 60,
           right: 60,
@@ -501,10 +514,31 @@ class StoryCard extends StatelessWidget {
 }
 
 /// Render [StoryCard] di luar layar (pohon widget tersendiri → RepaintBoundary.toImage) → PNG 1080×1920.
-Future<Uint8List> renderStoryCard(TrackShare s, {required String tagline, ui.Image? cover}) => renderWidgetPng(
-      StoryCard(title: s.title, artist: s.artist, link: s.shortUrl, tagline: tagline, cover: cover),
+/// Logo RAVE asli disertakan di kartu (gagal dimuat → cadangan ikon V + teks).
+Future<Uint8List> renderStoryCard(TrackShare s, {required String tagline, ui.Image? cover, bool withLogo = true}) async {
+  final logo = withLogo ? await loadRaveLogo() : null;
+  try {
+    return await renderWidgetPng(
+      StoryCard(title: s.title, artist: s.artist, link: s.shortUrl, tagline: tagline, cover: cover, logo: logo),
       storyCardSize,
     );
+  } finally {
+    logo?.dispose();
+  }
+}
+
+/// `assets/brand/rave-logo.webp` (420×246, untuk latar gelap) → ui.Image; galat → null.
+Future<ui.Image?> loadRaveLogo({AssetBundle? bundle}) async {
+  try {
+    final data = await (bundle ?? rootBundle).load('assets/brand/rave-logo.webp');
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    return frame.image;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Render widget apa pun ke PNG tanpa menampilkannya (tanpa gambar jaringan: semua aset harus sudah dimuat).
 Future<Uint8List> renderWidgetPng(Widget widget, Size size, {double pixelRatio = 1}) async {
