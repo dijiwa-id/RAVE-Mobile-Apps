@@ -101,10 +101,12 @@ class Player extends ChangeNotifier {
     _loud = null;
     _eqParams = null;
     _fxApplied = '';
-    if (!withFx) return AudioPlayer();
+    // Gangguan fokus audio ditangani [Player] sendiri (lihat [focusAction]) agar layanan latar tetap foreground
+    // selama jeda sementara dan pemutaran dilanjutkan setelah fokus kembali.
+    if (!withFx) return AudioPlayer(handleInterruptions: false);
     try {
       final eq = AndroidEqualizer(), loud = AndroidLoudnessEnhancer();
-      final p = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [loud, eq]));
+      final p = AudioPlayer(handleInterruptions: false, audioPipeline: AudioPipeline(androidAudioEffects: [loud, eq]));
       _eq = eq;
       _loud = loud;
       // Pita perangkat baru diketahui setelah pemutar native aktif (lagu pertama dimuat).
@@ -119,7 +121,7 @@ class Player extends ChangeNotifier {
     } catch (_) {
       _eq = null;
       _loud = null;
-      return AudioPlayer();
+      return AudioPlayer(handleInterruptions: false);
     }
   }
 
@@ -196,7 +198,8 @@ class Player extends ChangeNotifier {
       await loud.setEnabled(boost > 0);
     } catch (_) {}
   }
-  late final _Handler _handler;
+  /// Null sampai [init] (pengujian tidak memasang audio_service).
+  _Handler? _handler;
   S get _s => S.of(settings.locale);
 
   List<Playable> queue = [];
@@ -287,12 +290,113 @@ class Player extends ChangeNotifier {
       // Turun ke Gratis / keluar → pilihan kualitas Premium yang tersimpan dikembalikan ke auto.
       if (api.authed) unawaited(settings.enforceFreeQuality(premium: api.user?.premium ?? false));
     });
-    // Telepon masuk / headset dicabut → jeda (praktik aplikasi musik).
-    session.becomingNoisyEventStream.listen((_) => audio.pause());
-    session.interruptionEventStream.listen((e) {
-      if (e.begin) audio.pause();
-    });
+    // Headset dicabut → jeda. Fokus audio diambil aplikasi lain → lihat [focusAction].
+    session.becomingNoisyEventStream.listen((_) => unawaited(pauseByUser()));
+    session.interruptionEventStream.listen((e) => _onInterruption(e.begin, e.type));
   }
+
+  // ---- Fokus audio & layanan latar belakang ----
+  /// >0 selama perpindahan item (muat sesi, jeda iklan, pemulihan stream): audio_service tetap melihat "playing".
+  /// Tanpa ini `audio.stop()` di [_load] menerbitkan `idle` → AudioService.stop() (layanan & wakelock dilepas,
+  /// sesi media nonaktif) dan `playing=false` → keluar foreground. Di latar belakang proses lalu dibekukan/CPU tidur
+  /// sebelum lagu berikutnya dimuat, dan Android 12+ menolak memulai foreground lagi → antrean berhenti.
+  int _holdDepth = 0;
+
+  /// Dijeda karena fokus audio hilang sementara (Reels/video, asisten suara, telepon) — dilanjutkan saat fokus kembali.
+  bool _focusPaused = false;
+
+  bool get _holdForeground => _holdDepth > 0 || _focusPaused;
+
+  Future<T> _holding<T>(Future<T> Function() body) async {
+    _holdDepth++;
+    _publishState();
+    try {
+      return await body();
+    } finally {
+      _holdDepth--;
+      _publishState();
+    }
+  }
+
+  /// Keputusan saat fokus audio berubah (murni, mudah diuji).
+  /// - duck: Android 8+ menurunkan volume otomatis → abaikan.
+  /// - hilang sementara (`pause`): jeda & tandai, layanan tetap foreground agar proses tidak dibekukan; lanjut saat kembali.
+  /// - hilang permanen (`unknown`, mis. aplikasi musik lain): jeda biasa, tidak dilanjutkan otomatis.
+  static FocusAction focusAction({required bool begin, required AudioInterruptionType type, required bool playing, required bool focusPaused}) {
+    if (begin) {
+      return switch (type) {
+        AudioInterruptionType.duck => FocusAction.none,
+        AudioInterruptionType.pause => playing ? FocusAction.holdPause : FocusAction.none,
+        AudioInterruptionType.unknown => playing || focusPaused ? FocusAction.pause : FocusAction.none,
+      };
+    }
+    if (type == AudioInterruptionType.pause && focusPaused) return FocusAction.resume;
+    if (type == AudioInterruptionType.unknown && focusPaused) return FocusAction.release;
+    return FocusAction.none;
+  }
+
+  void _onInterruption(bool begin, AudioInterruptionType type) {
+    switch (focusAction(begin: begin, type: type, playing: audio.playing, focusPaused: _focusPaused)) {
+      case FocusAction.none:
+        return;
+      case FocusAction.holdPause:
+        _focusPaused = true; // sebelum pause: status yang diterbitkan tetap "playing"
+        unawaited(audio.pause());
+      case FocusAction.pause:
+        _focusPaused = false;
+        unawaited(audio.pause());
+      case FocusAction.resume:
+        _focusPaused = false;
+        unawaited(audio.play());
+      case FocusAction.release:
+        _focusPaused = false;
+    }
+    _publishState();
+  }
+
+  /// Jeda atas kehendak pendengar (UI, notifikasi, headset dicabut) — membatalkan lanjut-otomatis setelah gangguan.
+  Future<void> pauseByUser() async {
+    _focusPaused = false;
+    await audio.pause();
+    _publishState();
+  }
+
+  /// Putar atas kehendak pendengar.
+  Future<void> playByUser() {
+    _focusPaused = false;
+    return audio.play();
+  }
+
+  /// Status yang diterbitkan ke audio_service. Selama [hold] (perpindahan item / jeda fokus sementara) tidak pernah
+  /// `idle` dan selalu "playing" → layanan foreground, wakelock & sesi media dipertahankan.
+  static (bool, AudioProcessingState) serviceState(PlayerState st, {required bool hold}) {
+    final ps = switch (st.processingState) {
+      ProcessingState.idle => AudioProcessingState.idle,
+      ProcessingState.loading => AudioProcessingState.loading,
+      ProcessingState.buffering => AudioProcessingState.buffering,
+      ProcessingState.ready => AudioProcessingState.ready,
+      ProcessingState.completed => AudioProcessingState.completed,
+    };
+    if (!hold) return (st.playing, ps);
+    return (
+      true,
+      switch (ps) {
+        AudioProcessingState.idle || AudioProcessingState.completed || AudioProcessingState.error => AudioProcessingState.loading,
+        AudioProcessingState.ready when !st.playing => AudioProcessingState.buffering,
+        _ => ps,
+      }
+    );
+  }
+
+  @visibleForTesting
+  (bool, AudioProcessingState) get debugServiceState => serviceState(audio.playerState, hold: _holdForeground);
+
+  @visibleForTesting
+  bool get debugFocusPaused => _focusPaused;
+
+  /// Uji: picu penanganan akhir lagu seolah just_audio melaporkan `completed`.
+  @visibleForTesting
+  Future<void> debugCompleted() => _onCompleted();
 
   /// Langganan stream pemutar utama (diulang bila pemutar dibuat ulang tanpa efek).
   void _wire() {
@@ -389,7 +493,9 @@ class Player extends ChangeNotifier {
 
   /// Akhir cuplikan 30 dtk (tamu): pesan "cuplikan selesai", satu jeda iklan, lalu cuplikan item [next].
   /// Antrean yang diubah selama iklan dihormati (mis. pengguna memilih lagu lain → [index] baru dipakai).
-  Future<void> _previewAdvance(int next) async {
+  Future<void> _previewAdvance(int next) => _holding(() => _previewAdvanceInner(next));
+
+  Future<void> _previewAdvanceInner(int next) async {
     if (audio.playing) await audio.pause();
     _messages.add(_s.previewEnded);
     index = next;
@@ -411,7 +517,11 @@ class Player extends ChangeNotifier {
   void debugPreviewReached() => _onPosition(Duration(milliseconds: session?.previewMs ?? 30000));
 
   /// [resume] > 0: pemulihan item yang sama (stream kedaluwarsa/putus) — lanjut dari posisi terakhir.
-  Future<void> _load(Playable item, {Duration resume = Duration.zero}) async {
+  /// [autoplay] false: pemulihan stream saat dijeda — muat ulang tanpa memutar (dan tanpa menahan foreground).
+  Future<void> _load(Playable item, {Duration resume = Duration.zero, bool autoplay = true}) =>
+      autoplay ? _holding(() => _loadInner(item, resume: resume, autoplay: true)) : _loadInner(item, resume: resume, autoplay: false);
+
+  Future<void> _loadInner(Playable item, {required Duration resume, required bool autoplay}) async {
     final gen = ++_loadGen;
     final fresh = resume == Duration.zero;
     _previewHandled = false;
@@ -444,7 +554,10 @@ class Player extends ChangeNotifier {
       if (gen != _loadGen) return;
       await _setUrl(api.media(session!.streamUrl)!, resume);
       _publishItem();
-      unawaited(audio.play());
+      if (autoplay) {
+        _focusPaused = false;
+        unawaited(audio.play());
+      }
       if (fresh) _queueEvent('start');
     } catch (e) {
       if (gen != _loadGen) return;
@@ -459,7 +572,7 @@ class Player extends ChangeNotifier {
     if (c == null || session == null) return;
     if (_recoveries < 2) {
       _recoveries++;
-      unawaited(_load(c, resume: audio.position));
+      unawaited(_load(c, resume: audio.position, autoplay: audio.playing || _holdForeground));
       return;
     }
     error = _s.streamLost;
@@ -479,13 +592,14 @@ class Player extends ChangeNotifier {
   Future<void> _onCompleted() async {
     if (_completing) return;
     _completing = true;
+    _holdDepth++; // layanan tetap foreground selama jeda iklan & pemuatan item berikutnya
     try {
       _queueEvent('complete');
       // Lagu harus sudah tercatat server (stream ≥ 30 dtk) sebelum jeda iklan diminta — tanpa ini, lagu yang event
       // progresnya belum terkirim belum terhitung dan jeda "setiap lagu" terlewat. Maks 2 dtk (offline → lanjut).
       if (adBreakAllowed) await _lastFlush?.timeout(const Duration(seconds: 2), onTimeout: () {});
       if (repeat == LoopMode.one && current != null) {
-        await _adBreak(current!);
+        await (debugAdBreak ?? _adBreak)(current!);
         await audio.seek(Duration.zero);
         unawaited(audio.play());
         return;
@@ -497,10 +611,13 @@ class Player extends ChangeNotifier {
         return;
       }
       index = n;
-      await _adBreak(queue[n]);
-      await _load(queue[index]);
+      await (debugAdBreak ?? _adBreak)(queue[n]);
+      if (index < 0 || index >= queue.length) return; // antrean dikosongkan selama iklan
+      await (debugLoad ?? _load)(queue[index]);
     } finally {
       _completing = false;
+      _holdDepth--;
+      _publishState();
     }
   }
 
@@ -545,7 +662,7 @@ class Player extends ChangeNotifier {
     StreamSubscription<PlayerState>? sub;
     if (a.type == 'audio' && a.audioUrl != null) {
       try {
-        await _adAudio.setUrl(api.media(a.audioUrl)!);
+        await _adAudio.setUrl(api.media(a.audioUrl)!).timeout(const Duration(seconds: 8));
         await _adAudio.setVolume(1.0);
         sub = _adAudio.playerStateStream.listen((s) {
           if (s.processingState == ProcessingState.completed && !(_adDone?.isCompleted ?? true)) {
@@ -623,7 +740,7 @@ class Player extends ChangeNotifier {
     if (_adBusy) return;
     if (current == null) return;
     if (error != null && session == null) return retry();
-    audio.playing ? await audio.pause() : unawaited(audio.play());
+    audio.playing ? await pauseByUser() : unawaited(playByUser());
   }
 
   Future<void> next() async {
@@ -680,6 +797,7 @@ class Player extends ChangeNotifier {
 
   /// Logout: hentikan pemutaran & buang event milik akun sebelumnya.
   Future<void> reset() async {
+    _focusPaused = false;
     _pending.clear();
     _flushTimer?.cancel();
     _flushTimer = null;
@@ -692,7 +810,7 @@ class Player extends ChangeNotifier {
     session = null;
     error = null;
     _publishQueue();
-    _handler.mediaItem.add(null);
+    _handler?.mediaItem.add(null);
     notifyListeners();
   }
 
@@ -707,26 +825,23 @@ class Player extends ChangeNotifier {
       );
 
   void _publishItem() {
-    if (current != null) _handler.mediaItem.add(_media(current!));
+    if (current != null) _handler?.mediaItem.add(_media(current!));
   }
 
-  void _publishQueue() => _handler.queue.add(queue.map(_media).toList());
+  void _publishQueue() => _handler?.queue.add(queue.map(_media).toList());
 
   void _publishState() {
+    final h = _handler;
+    if (h == null) return;
     final st = audio.playerState;
-    _handler.playbackState.add(PlaybackState(
-      controls: [MediaControl.skipToPrevious, st.playing ? MediaControl.pause : MediaControl.play, MediaControl.skipToNext],
+    final (playing, processing) = serviceState(st, hold: _holdForeground);
+    h.playbackState.add(PlaybackState(
+      controls: [MediaControl.skipToPrevious, playing ? MediaControl.pause : MediaControl.play, MediaControl.skipToNext],
       // Gratis tanpa izin geser: notifikasi/layar kunci tidak menawarkan seek (bilah progres tak bisa digeser).
       systemActions: canSeek ? const {MediaAction.seek, MediaAction.seekForward, MediaAction.seekBackward} : const {},
       androidCompactActionIndices: const [0, 1, 2],
-      processingState: switch (st.processingState) {
-        ProcessingState.idle => AudioProcessingState.idle,
-        ProcessingState.loading => AudioProcessingState.loading,
-        ProcessingState.buffering => AudioProcessingState.buffering,
-        ProcessingState.ready => AudioProcessingState.ready,
-        ProcessingState.completed => AudioProcessingState.completed,
-      },
-      playing: st.playing,
+      processingState: processing,
+      playing: playing,
       updatePosition: audio.position,
       bufferedPosition: audio.bufferedPosition,
       speed: audio.speed,
@@ -737,16 +852,20 @@ class Player extends ChangeNotifier {
   }
 }
 
+/// Tindakan pemutar saat fokus audio berubah (lihat [Player.focusAction]).
+enum FocusAction { none, holdPause, pause, resume, release }
+
 /// Jembatan audio_service: tombol notifikasi / layar kunci / headset → Player.
 class _Handler extends BaseAudioHandler with SeekHandler {
   _Handler(this.p);
   final Player p;
   @override
-  Future<void> play() => p.audio.play();
+  Future<void> play() => p.playByUser();
   @override
-  Future<void> pause() => p.audio.pause();
+  Future<void> pause() => p.pauseByUser();
   @override
   Future<void> stop() async {
+    p._focusPaused = false;
     await p.flush();
     await p.audio.stop();
     return super.stop();
