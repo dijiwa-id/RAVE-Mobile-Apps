@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/api.dart';
 import '../core/app_state.dart';
+import '../core/google_native.dart';
 import '../core/i18n.dart';
 import '../core/social_login.dart';
 import '../core/theme.dart';
@@ -53,7 +55,11 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   final _email = TextEditingController();
   final _code = TextEditingController();
+  final _second = TextEditingController();
   bool _codeStep = false, _busy = false;
+  /// Token tantangan 2FA (langkah kedua) — null = belum/ tidak perlu.
+  String? _mfaToken;
+  bool _useRecovery = false;
   String? _err, _dev;
   List<String> _providers = const [];
   String? _socialBusy;
@@ -88,6 +94,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     _flow?.dispose();
     _email.dispose();
     _code.dispose();
+    _second.dispose();
     super.dispose();
   }
 
@@ -102,15 +109,64 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (mounted) Navigator.pop(context, true);
   }
 
+  /// Google: lembar akun Google native di atas aplikasi (akun yang tersinkron di ponsel). Tidak tersedia → alur browser
+  /// dalam aplikasi. Provider lain langsung ke alur browser dalam aplikasi.
   Future<void> _social(String provider) async {
+    final app = App.read(context);
+    final clientId = app.api.googleClientId;
+    if (provider == 'google' && clientId != null && clientId.isNotEmpty) {
+      setState(() => (_socialBusy = provider, _err = null));
+      final r = await GoogleNative.signIn(clientId);
+      if (!mounted) return;
+      switch (r) {
+        case GoogleNativeToken(:final idToken):
+          try {
+            await app.api.googleNative(idToken);
+            await _afterLogin();
+          } on MfaRequired catch (m) {
+            _startMfa(m.token);
+          } catch (e) {
+            if (mounted) setState(() => _err = friendlyError(app.s, e));
+          } finally {
+            if (mounted) setState(() => _socialBusy = null);
+          }
+          return;
+        case GoogleNativeCanceled():
+          setState(() => _socialBusy = null);
+          return;
+        case GoogleNativeUnavailable(:final reason):
+          debugPrint('[RAVE] Google native tidak tersedia ($reason) → alur browser dalam aplikasi');
+      }
+    }
+    await _socialBrowser(provider);
+  }
+
+  /// Buka halaman masuk provider di tab browser DALAM aplikasi (Custom Tab) — cadangan bila tab tidak didukung: browser.
+  Future<bool> _openAuth(Uri url) async {
+    try {
+      if (await launchUrl(url, mode: LaunchMode.inAppBrowserView)) return true;
+    } catch (_) {}
+    return launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _socialBrowser(String provider) async {
     final app = App.read(context);
     final s = app.s;
     setState(() => (_socialBusy = provider, _err = null));
     try {
       final launch = await app.api.startSocial(provider);
       final url = app.api.socialStartUrl(launch);
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) throw const _BrowserFail();
-      final flow = SocialLoginFlow(launch, poll: app.api.pollSocial, onDone: app.api.saveSession)..start();
+      if (!await _openAuth(url)) throw const _BrowserFail();
+      String? challenge;
+      final flow = SocialLoginFlow(launch, poll: app.api.pollSocial, onDone: (t) async {
+        final mfa = MfaRequired.from(t);
+        if (mfa != null) {
+          challenge = mfa.token;
+        } else {
+          await app.api.saveSession(t);
+        }
+      })
+        ..start();
       _flow?.dispose();
       _flow = flow;
       if (!mounted) return;
@@ -119,10 +175,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         isDismissible: false,
         enableDrag: false,
         showDragHandle: true,
-        builder: (_) => _SocialWaitSheet(flow: flow, label: _providerLabel(s, provider), onReopen: () => launchUrl(url, mode: LaunchMode.externalApplication)),
+        builder: (_) => _SocialWaitSheet(flow: flow, label: _providerLabel(s, provider), onReopen: () => _openAuth(url)),
       );
       flow.cancel();
-      if (done == true) {
+      // Tutup tab masuk dalam aplikasi bila platform mendukung (Android Custom Tab tertutup otomatis saat kembali).
+      try {
+        if (await supportsCloseForLaunchMode(LaunchMode.inAppBrowserView)) await closeInAppWebView();
+      } catch (_) {}
+      if (done == true && challenge != null) {
+        _startMfa(challenge!);
+      } else if (done == true) {
         await _afterLogin();
       } else if (mounted && (flow.state == SocialPollState.error || flow.state == SocialPollState.expired)) {
         setState(() => _err = flow.message ?? (flow.state == SocialPollState.expired ? s.socialExpired : s.genericError));
@@ -153,11 +215,83 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     try {
       await app.api.verifyOtp(_email.text, _code.text);
       await _afterLogin();
+    } on MfaRequired catch (m) {
+      _startMfa(m.token);
     } catch (e) {
       if (mounted) setState(() => _err = friendlyError(app.s, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _startMfa(String token) {
+    if (!mounted) return;
+    setState(() => (_mfaToken = token, _useRecovery = false, _second.text = '', _err = null));
+  }
+
+  /// Langkah kedua: kode authenticator / kode pemulihan. Sesi verifikasi habis → kembali ke langkah email.
+  Future<void> _verifyMfa() async {
+    final app = App.read(context);
+    final token = _mfaToken;
+    if (token == null) return;
+    setState(() => (_busy = true, _err = null));
+    try {
+      await app.api.verifyMfa(token, code: _useRecovery ? null : _second.text, recoveryCode: _useRecovery ? _second.text : null);
+      await _afterLogin();
+    } on ApiError catch (e) {
+      if (!mounted) return;
+      if (e.status == 401 && e.problem['title'] == 'MFA Expired') {
+        setState(() => (_mfaToken = null, _codeStep = false, _code.text = '', _err = app.s.mfaExpired));
+      } else {
+        setState(() => _err = e.status == 429 ? app.s.mfaLocked : e.status == 401 ? (_useRecovery ? app.s.mfaWrongRecovery : app.s.mfaWrong) : friendlyError(app.s, e));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _err = friendlyError(app.s, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  List<Widget> _mfaStep(S s) {
+    final ready = _useRecovery ? _second.text.trim().length >= 8 : _second.text.length == 6;
+    return [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Icon(Icons.key_rounded, size: 18, color: Rave.mustard),
+        const SizedBox(width: 8),
+        Expanded(child: Text(_useRecovery ? s.mfaRecoveryBody : s.mfaBody, style: Rave.body(color: context.rc.muted))),
+      ]),
+      const SizedBox(height: 14),
+      Eyebrow(_useRecovery ? s.mfaRecovery : s.mfaCode),
+      const SizedBox(height: 8),
+      TextField(
+        key: const ValueKey('mfa-input'),
+        controller: _second,
+        autofocus: true,
+        keyboardType: _useRecovery ? TextInputType.visiblePassword : TextInputType.number,
+        autofillHints: _useRecovery ? null : const [AutofillHints.oneTimeCode],
+        maxLength: _useRecovery ? 40 : 6,
+        textAlign: TextAlign.center,
+        textCapitalization: TextCapitalization.characters,
+        onChanged: (v) {
+          setState(() {});
+          if (!_useRecovery && v.length == 6) _verifyMfa();
+        },
+        style: _useRecovery ? const TextStyle(fontFamily: Rave.mono, fontSize: 18, letterSpacing: 2) : const TextStyle(fontFamily: Rave.mono, fontSize: 26, letterSpacing: 12),
+        decoration: const InputDecoration(counterText: ''),
+      ),
+      const SizedBox(height: 16),
+      PrimaryButton(label: s.signIn, busy: _busy, onTap: ready ? _verifyMfa : null),
+      const SizedBox(height: 10),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        TextButton(onPressed: () => setState(() => (_mfaToken = null, _codeStep = false, _code.text = '', _err = null)), child: Text(s.mfaBack, style: Rave.body(color: context.rc.muted))),
+        Flexible(
+          child: TextButton(
+            onPressed: () => setState(() => (_useRecovery = !_useRecovery, _second.text = '', _err = null)),
+            child: Text(_useRecovery ? s.mfaUseApp : s.mfaUseRecovery, textAlign: TextAlign.end, style: Rave.body(color: context.rc.muted)),
+          ),
+        ),
+      ]),
+    ];
   }
 
   @override
@@ -188,7 +322,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           Text(s.authBody, style: Rave.body(color: context.rc.muted)),
           const SizedBox(height: 28),
-          if (!_codeStep) ...[
+          if (_mfaToken != null) ..._mfaStep(s) else if (!_codeStep) ...[
             Eyebrow(s.email),
             const SizedBox(height: 8),
             TextField(

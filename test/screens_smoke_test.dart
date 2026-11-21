@@ -108,39 +108,49 @@ void _suite() {
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets('Pengaturan akun Gratis: kartu Premium, tanpa Kualitas audio/EQ; cari (${w.round()} dp)', (t) async {
+    testWidgets('Pengaturan akun Gratis: kartu profil, banner Premium, baris terkunci; cari (${w.round()} dp)', (t) async {
       final app = await _state();
       app.api.user = const Me(id: 'u1', email: 'fan@rave.id', displayName: 'Fan Rave');
-      await _pump(t, app, const SettingsScreen(), width: w);
-      expect(find.text('KUALITAS AUDIO'), findsNothing);
-      expect(find.text('EQUALIZER'), findsNothing);
+      await _pump(t, app, const SettingsScreen(), width: w, height: 1600);
+      expect(find.byKey(const ValueKey('profile-card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('premium-banner')), findsOneWidget);
       expect(find.text('Kualitas audio tinggi & Equalizer'), findsOneWidget);
-      expect(find.text('Lihat Premium'), findsOneWidget);
+      // Kualitas audio & Equalizer tetap terlihat sebagai baris bertanda Premium (bukan kontrol aktif).
+      expect(find.text('Kualitas audio'), findsOneWidget);
+      expect(find.text('Equalizer'), findsOneWidget);
+      expect(find.text('PREMIUM'), findsWidgets);
+      await t.scrollUntilVisible(find.byKey(const ValueKey('delete-account')), 300, scrollable: find.byType(Scrollable).first);
+      expect(find.byKey(const ValueKey('logout')), findsOneWidget);
+      expect(find.byKey(const ValueKey('delete-account')), findsOneWidget);
+      await t.scrollUntilVisible(find.byType(TextField), -300, scrollable: find.byType(Scrollable).first);
       await t.enterText(find.byType(TextField).first, 'normal');
       await t.pump();
       expect(find.text('Normalisasi volume'), findsOneWidget);
-      // Cari hanya baris yang tampil: "equalizer" → kartu Premium, bukan bagian EQ.
-      await t.enterText(find.byType(TextField).first, 'equalizer');
+      expect(find.byKey(const ValueKey('profile-card')), findsNothing);
+      await t.enterText(find.byType(TextField).first, 'whatsapp');
       await t.pump();
-      expect(find.text('Kualitas audio tinggi & Equalizer'), findsOneWidget);
-      expect(find.text('EQUALIZER'), findsNothing);
+      expect(find.text('Notifikasi'), findsOneWidget); // isi sub-halaman ikut dicari
       await t.enterText(find.byType(TextField).first, 'zzzz');
       await t.pump();
       expect(find.textContaining('Nggak ada pengaturan'), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
 
-    testWidgets('Pengaturan akun Premium: Kualitas audio & Equalizer tampil (${w.round()} dp)', (t) async {
+    testWidgets('Pengaturan akun Premium: tanpa banner, Kualitas audio & Equalizer membuka sub-halaman (${w.round()} dp)', (t) async {
       final app = await _state();
       app.api.user = const Me(id: 'u2', email: 'premium@rave.id', displayName: 'Premium Rave', premium: true);
-      await _pump(t, app, const SettingsScreen(), width: w);
-      expect(find.text('KUALITAS AUDIO'), findsWidgets);
-      expect(find.text('Kualitas audio tinggi & Equalizer'), findsNothing);
-      await t.enterText(find.byType(TextField).first, 'equalizer');
-      await t.pump();
-      expect(find.text('EQUALIZER'), findsOneWidget);
-      await t.enterText(find.byType(TextField).first, 'normal');
-      await t.pump();
-      expect(find.text('Normalisasi volume'), findsOneWidget);
+      await _pump(t, app, const SettingsScreen(), width: w, height: 1600);
+      expect(find.byKey(const ValueKey('premium-banner')), findsNothing);
+      expect(find.text('PREMIUM AKTIF'), findsOneWidget);
+      await t.tap(find.text('Kualitas audio'));
+      await t.pumpAndSettle();
+      expect(find.text('KUALITAS AUDIO'), findsOneWidget); // judul sub-halaman
+      await t.pageBack();
+      await t.pumpAndSettle();
+      await t.tap(find.text('Equalizer'));
+      await t.pumpAndSettle();
+      expect(find.text('EQUALIZER'), findsWidgets);
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('Beranda tamu: satu ikon Pengaturan → lembar Masuk/Daftar + Server (${w.round()} dp)', (t) async {

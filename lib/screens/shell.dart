@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../core/app_state.dart';
-import '../core/models.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/connection.dart';
@@ -53,12 +52,17 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     _shell = this;
-    _life = AppLifecycleListener(onPause: () => App.read(context).player.onBackground(), onDetach: () => App.read(context).player.onBackground());
+    _life = AppLifecycleListener(
+      onPause: () => App.read(context).player.onBackground(),
+      onDetach: () => App.read(context).player.onBackground(),
+      // Kembali dari browser (mis. verifikasi akun di web) → status/badge Verified terbaru.
+      onResume: () => unawaited(App.read(context).api.refreshMe()),
+    );
     final app = App.read(context);
     // Kebijakan tema platform terbaru (default & boleh-pilih).
     unawaited(refreshAppearance(app));
     // Profil terbaru (status Premium, tema akun, dsb.).
-    if (app.api.authed) app.api.get('/v1/me').then((j) => app.api.setUser(Me.fromJson(j))).catchError((_) {});
+    unawaited(app.api.refreshMe());
     _msgs = app.player.messages.listen((m) {
       if (mounted) toast(context, m);
     });

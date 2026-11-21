@@ -41,7 +41,8 @@ class SocialPollResult {
 /// Petakan respons HTTP polling → status (428 menunggu, 200 token, 400 gagal, 410/lainnya kedaluwarsa).
 SocialPollResult socialPollFromResponse(int status, Object? body) {
   final j = body is Json ? body : const <String, dynamic>{};
-  if (status == 200 && j['access_token'] is String) return SocialPollResult(SocialPollState.done, tokens: j);
+  // Selesai: token sesi, atau tantangan 2FA (`mfa_required`) yang dilanjutkan di layar Masuk.
+  if (status == 200 && (j['access_token'] is String || j['mfa_required'] == true)) return SocialPollResult(SocialPollState.done, tokens: j);
   if (status == 428) return const SocialPollResult(SocialPollState.pending);
   if (status == 400 || status == 403) return SocialPollResult(SocialPollState.error, message: (j['detail'] ?? j['title'])?.toString());
   return SocialPollResult(SocialPollState.expired, message: j['detail']?.toString());

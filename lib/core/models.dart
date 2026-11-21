@@ -11,21 +11,97 @@ class Me {
   final String? city;
   /// Tema aplikasi dengar tersimpan di akun: `light` · `dark` · `system` · null (ikut default platform).
   final String? theme;
-  const Me({required this.id, required this.email, required this.displayName, this.avatarUrl, this.locale, this.premium = false, this.onboarded = true, this.city, this.theme});
-  factory Me.fromJson(Json j) => Me(
-        id: j['id'],
-        email: j['email'] ?? '',
-        displayName: j['display_name'] ?? '',
-        avatarUrl: j['avatar_url'],
-        locale: j['locale'],
-        premium: j['premium'] == true,
-        onboarded: j['onboarded'] != false,
-        city: j['city'],
-        theme: j['theme'] as String?,
-      );
-  Json toJson() => {'id': id, 'email': email, 'display_name': displayName, 'avatar_url': avatarUrl, 'locale': locale, 'premium': premium, 'onboarded': onboarded, 'city': city, 'theme': theme};
 
-  Me withTheme(String? t) => Me(id: id, email: email, displayName: displayName, avatarUrl: avatarUrl, locale: locale, premium: premium, onboarded: onboarded, city: city, theme: t);
+  /// Data profil lengkap (verifikasi akun). [birthDate] = `YYYY-MM-DD`; [gender] = male|female|other|undisclosed.
+  final String? phone, fullName, birthDate, gender, bio;
+
+  /// NIK tersamar dari server (mis. `************3456`) — nilai asli tidak pernah dikirim balik.
+  final String? idNumberMasked;
+  final List<String> socials;
+
+  /// Badge Verified tampil hanya bila [verified]. [verificationStatus] = NONE|PENDING|VERIFIED|REJECTED — VERIFIED juga
+  /// berarti identitas (KYC) disetujui; akun KYC lama bisa VERIFIED tanpa badge sampai data dirinya lengkap.
+  final bool verified;
+  final String? verifiedAt;
+  final String verificationStatus;
+
+  /// Verifikasi 2 langkah (aplikasi authenticator) aktif.
+  final bool totpEnabled;
+
+  const Me({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    this.avatarUrl,
+    this.locale,
+    this.premium = false,
+    this.onboarded = true,
+    this.city,
+    this.theme,
+    this.phone,
+    this.fullName,
+    this.birthDate,
+    this.gender,
+    this.bio,
+    this.idNumberMasked,
+    this.socials = const [],
+    this.verified = false,
+    this.verifiedAt,
+    this.verificationStatus = 'NONE',
+    this.totpEnabled = false,
+  });
+
+  /// Toleran terhadap profil tersimpan versi lama (kolom baru tidak ada → bawaan).
+  factory Me.fromJson(Json j) {
+    final verified = j['verified'] == true;
+    final status = j['verification_status'];
+    return Me(
+      id: j['id'],
+      email: j['email'] ?? '',
+      displayName: j['display_name'] ?? '',
+      avatarUrl: j['avatar_url'],
+      locale: j['locale'],
+      premium: j['premium'] == true,
+      onboarded: j['onboarded'] != false,
+      city: j['city'],
+      theme: j['theme'] as String?,
+      phone: j['phone'] as String?,
+      fullName: j['full_name'] as String?,
+      birthDate: j['birth_date'] as String?,
+      gender: j['gender'] as String?,
+      bio: j['bio'] as String?,
+      idNumberMasked: j['id_number_masked'] as String?,
+      socials: (j['socials'] as List? ?? const []).whereType<String>().toList(),
+      verified: verified,
+      verifiedAt: j['verified_at'] as String?,
+      verificationStatus: status is String && status.isNotEmpty ? status : (verified ? 'VERIFIED' : 'NONE'),
+      totpEnabled: j['totp_enabled'] == true || j['mfa_enabled'] == true,
+    );
+  }
+  Json toJson() => {
+        'id': id,
+        'email': email,
+        'display_name': displayName,
+        'avatar_url': avatarUrl,
+        'locale': locale,
+        'premium': premium,
+        'onboarded': onboarded,
+        'city': city,
+        'theme': theme,
+        'phone': phone,
+        'full_name': fullName,
+        'birth_date': birthDate,
+        'gender': gender,
+        'bio': bio,
+        'id_number_masked': idNumberMasked,
+        'socials': socials,
+        'verified': verified,
+        'verified_at': verifiedAt,
+        'verification_status': verificationStatus,
+        'totp_enabled': totpEnabled,
+      };
+
+  Me withTheme(String? t) => Me.fromJson({...toJson(), 'theme': t});
 }
 
 class ArtistRef {

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import 'google_native.dart';
 import 'models.dart';
 import 'social_login.dart';
 import 'version.dart';
@@ -18,6 +19,14 @@ class ApiError implements Exception {
   ApiError(this.status, this.message, [this.problem = const {}]);
   @override
   String toString() => message;
+}
+
+/// Faktor pertama sukses (OTP / login sosial) tetapi akun memakai verifikasi 2 langkah → selesaikan dengan [Api.verifyMfa].
+class MfaRequired implements Exception {
+  const MfaRequired(this.token, this.expiresIn);
+  final String token;
+  final int expiresIn;
+  static MfaRequired? from(Json j) => j['mfa_required'] == true && j['mfa_token'] is String ? MfaRequired(j['mfa_token'] as String, (j['expires_in'] as num?)?.toInt() ?? 300) : null;
 }
 
 /// Server tidak terjangkau (offline, alamat salah, timeout).
@@ -118,16 +127,25 @@ class Api extends ChangeNotifier {
         .whenComplete(() => _refreshing = null);
   }
 
-  Future<T> request<T>(String path, {String method = 'GET', Object? body, Map<String, String>? query, bool auth = true, Duration timeout = const Duration(seconds: 20), String? server}) async {
+  Future<T> request<T>(String path,
+      {String method = 'GET', Object? body, Map<String, String>? query, bool auth = true, Duration timeout = const Duration(seconds: 20), String? server, List<int>? bytes, String? contentType}) async {
     // `server`: uji alamat lain tanpa token (lihat probeServer).
     if (server != null) auth = false;
     final uri = Uri.parse('${server ?? base}$path').replace(queryParameters: query == null || query.isEmpty ? null : query);
     Future<http.Response> go() {
       final h = <String, String>{'accept-language': settings.locale, 'x-app-version': 'android/$appVersion+$appBuild'};
-      if (body != null) h['content-type'] = 'application/json';
+      if (bytes != null) {
+        h['content-type'] = contentType ?? 'application/octet-stream';
+      } else if (body != null) {
+        h['content-type'] = 'application/json';
+      }
       if (auth && _access != null) h['authorization'] = 'Bearer $_access';
       final req = http.Request(method, uri)..headers.addAll(h);
-      if (body != null) req.body = jsonEncode(body);
+      if (bytes != null) {
+        req.bodyBytes = bytes;
+      } else if (body != null) {
+        req.body = jsonEncode(body);
+      }
       return _client.send(req).then(http.Response.fromStream).timeout(timeout);
     }
 
@@ -162,6 +180,24 @@ class Api extends ChangeNotifier {
   Future<dynamic> put(String path, [Object? body]) => request<dynamic>(path, method: 'PUT', body: body);
   Future<dynamic> delete(String path) => request<dynamic>(path, method: 'DELETE');
 
+  /// Muat ulang profil (status Premium, tema akun, badge/status verifikasi). Galat diabaikan — profil tersimpan tetap dipakai.
+  Future<void> refreshMe() async {
+    if (!authed) return;
+    try {
+      await setUser(Me.fromJson(await get('/v1/me')));
+    } catch (_) {}
+  }
+
+  /// Unggah gambar (dua langkah, sama dengan web `uploadFile`): daftarkan di `/v1/studio/uploads`, lalu PUT biner.
+  /// Mengembalikan URL publik (relatif `/v1/catalog/media/…`) + peringatan validasi server (mis. bukan persegi).
+  Future<({String url, List<String> warnings})> uploadImage(List<int> data, {required String filename, required String contentType, String purpose = 'avatar'}) async {
+    final u = await request<Json>('/v1/studio/uploads',
+        method: 'POST', body: {'kind': 'artwork', 'purpose': purpose, 'filename': filename, 'content_type': contentType, 'size': data.length});
+    final r = await request<dynamic>(u['upload_url'] as String, method: 'PUT', bytes: data, contentType: contentType, timeout: const Duration(seconds: 90));
+    final j = r is Json ? r : const <String, dynamic>{};
+    return (url: (j['public_url'] ?? u['public_url']) as String, warnings: (j['warnings'] as List? ?? const []).whereType<String>().toList());
+  }
+
   // ---- Autentikasi OTP (IAM RAVE hanya OTP — tanpa kata sandi) ----
   Future<String?> sendOtp(String email) async {
     final r = await request<Json>('/v1/auth/otp', method: 'POST', body: {'destination': email.trim(), 'channel': 'email'}, auth: false);
@@ -170,13 +206,37 @@ class Api extends ChangeNotifier {
 
   Future<void> verifyOtp(String email, String code) async {
     final r = await request<Json>('/v1/auth/token', method: 'POST', body: {'grant_type': 'otp', 'destination': email.trim(), 'code': code.trim()}, auth: false);
+    final mfa = MfaRequired.from(r);
+    if (mfa != null) throw mfa;
+    await _save(r);
+  }
+
+  /// Langkah kedua 2FA: kode authenticator 6 digit ATAU kode pemulihan sekali pakai.
+  /// 401 berjudul "MFA Expired" → sesi verifikasi habis, kembali ke langkah pertama.
+  Future<void> verifyMfa(String token, {String? code, String? recoveryCode}) async {
+    final r = await request<Json>('/v1/auth/token',
+        method: 'POST',
+        body: {'grant_type': 'mfa', 'mfa_token': token, if (code != null) 'code': code.trim(), if (recoveryCode != null) 'recovery_code': recoveryCode.trim()},
+        auth: false);
     await _save(r);
   }
 
   // ---- Login sosial (Google/Apple/Facebook; `dev` = simulasi di server development) ----
+  /// Client ID web Google dari server (= `serverClientId` login Google native). Null = server lama / Google nonaktif.
+  String? googleClientId;
+
+  /// Login Google native: ID token dari lembar akun sistem → sesi RAVE, atau [MfaRequired] bila akun memakai 2FA.
+  Future<void> googleNative(String idToken) async {
+    final r = await request<Json>('/v1/auth/oauth/google/native', method: 'POST', body: {'id_token': idToken, 'client': 'mobile'}, auth: false);
+    final mfa = MfaRequired.from(r);
+    if (mfa != null) throw mfa;
+    await _save(r);
+  }
+
   Future<List<String>> socialProviders() async {
     final r = await request<Json>('/v1/auth/oauth/providers', auth: false, timeout: const Duration(seconds: 8));
     final list = (r['providers'] as List? ?? const []).whereType<String>().toList();
+    googleClientId = r['google_client_id'] as String?;
     return [for (final p in const ['google', 'apple', 'facebook', 'dev']) if (list.contains(p)) p];
   }
 
@@ -202,6 +262,7 @@ class Api extends ChangeNotifier {
   Future<void> saveSession(Json tokens) => _save(tokens);
 
   Future<void> logout() async {
+    unawaited(GoogleNative.signOut());
     final rt = _refresh;
     if (rt != null) {
       try {

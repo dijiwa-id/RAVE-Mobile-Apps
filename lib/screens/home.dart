@@ -11,6 +11,7 @@ import '../widgets/home_shelves.dart';
 import '../widgets/links.dart';
 import '../widgets/media.dart';
 import '../widgets/motion.dart';
+import '../widgets/verified_badge.dart';
 import 'browse.dart';
 import 'live.dart';
 import 'login.dart';
@@ -130,7 +131,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 22),
                   Eyebrow('RAVE · ${app.api.authed ? s.home : s.guest}', color: rc.accent),
                   const SizedBox(height: 6),
-                  Text('${s.greeting(DateTime.now().hour)}${name == null || name.isEmpty ? '' : ', $name'}'.toUpperCase(), style: Rave.poster(40)),
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: '${s.greeting(DateTime.now().hour)}${name == null || name.isEmpty ? '' : ', $name'}'.toUpperCase()),
+                      // Badge Verified di samping nama (hanya akun terverifikasi).
+                      if (name != null && name.isNotEmpty && (app.api.user?.verified ?? false))
+                        const WidgetSpan(alignment: PlaceholderAlignment.middle, child: Padding(padding: EdgeInsets.only(left: 8), child: VerifiedBadge(size: 28))),
+                    ]),
+                    style: Rave.poster(40),
+                  ),
                   if (!app.api.authed) ...[
                     const SizedBox(height: 10),
                     Text(s.guestBanner, style: Rave.body(size: 13, color: rc.text.withValues(alpha: 0.85))),

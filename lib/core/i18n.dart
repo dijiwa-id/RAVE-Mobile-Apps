@@ -96,6 +96,26 @@ class S {
   String get changeEmail => _('Ganti email', 'Change email');
   String get resend => _('Kirim ulang', 'Resend');
   String devCode(String c) => _('Kode dev: $c', 'Dev code: $c');
+
+  // Verifikasi 2 langkah (2FA) saat masuk
+  String get mfaCode => _('Kode authenticator', 'Authenticator code');
+  String get mfaBody => _('Akun ini memakai verifikasi 2 langkah. Masukkan kode 6 digit dari aplikasi authenticator kamu.', 'This account uses two-step verification. Enter the 6-digit code from your authenticator app.');
+  String get mfaRecovery => _('Kode pemulihan', 'Recovery code');
+  String get mfaRecoveryBody => _('Masukkan salah satu kode pemulihan yang kamu simpan saat mengaktifkan verifikasi 2 langkah. Setiap kode hanya berlaku sekali.', 'Enter one of the recovery codes you saved when you turned on two-step verification. Each code works once.');
+  String get mfaUseRecovery => _('Pakai kode pemulihan', 'Use a recovery code');
+  String get mfaUseApp => _('Pakai aplikasi authenticator', 'Use authenticator app');
+  String get mfaBack => _('Kembali', 'Back');
+  String get mfaWrong => _('Kode authenticator salah. Pastikan jam di ponsel kamu akurat.', 'Wrong authenticator code. Make sure your phone clock is accurate.');
+  String get mfaWrongRecovery => _('Kode pemulihan salah atau sudah dipakai.', 'Wrong or already used recovery code.');
+  String get mfaLocked => _('Terlalu banyak kode salah. Verifikasi 2 langkah dikunci sementara — coba lagi beberapa menit lagi.', 'Too many wrong codes. Two-step verification is temporarily locked — try again in a few minutes.');
+  String get mfaExpired => _('Sesi verifikasi berakhir. Silakan masuk lagi.', 'Verification session expired. Please sign in again.');
+  // Keamanan di Pengaturan
+  String get twoStep => _('Verifikasi 2 langkah', 'Two-step verification');
+  String twoStepStatus(bool on) => on
+      ? _('Aktif — setiap masuk meminta kode dari aplikasi authenticator.', 'On — every sign-in asks for a code from your authenticator app.')
+      : _('Belum aktif. Lindungi akun dengan aplikasi authenticator (Google Authenticator, Authy, dll.).', 'Off. Protect your account with an authenticator app (Google Authenticator, Authy, etc.).');
+  String twoStepAction(bool on) => on ? _('Kelola di web', 'Manage in web') : _('Aktifkan di web', 'Turn on in web');
+  String get twoStepOnWeb => _('Kode QR & kode pemulihan dikelola di aplikasi web.', 'QR code & recovery codes are managed in the web app.');
   // Login sosial (alur aplikasi: browser sistem + kode pencocokan)
   String get orContinueWith => _('atau lanjutkan dengan', 'or continue with');
   String continueWith(String p) => _('Lanjutkan dengan $p', 'Continue with $p');
@@ -275,6 +295,24 @@ class S {
         'ads' => _('Iklan yang relevan', 'Relevant ads'),
         _ => _('Berbagi data agregat anonim dengan artis', 'Share anonymous aggregate data with artists'),
       };
+  String consentDesc(String p) => switch (p) {
+        'marketing' => _('Info rilis, event & promo RAVE lewat email/WhatsApp.', 'Release, event & promo news from RAVE by email/WhatsApp.'),
+        'personalization' => _('Beranda & rekomendasi disesuaikan dari riwayat dengarmu.', 'Home & recommendations tailored from your listening history.'),
+        'ads' => _('Iklan untuk akun Gratis disesuaikan kota & seleramu.', 'Ads on Free accounts tailored to your city & taste.'),
+        _ => _('Statistik pendengar tanpa identitas untuk membantu artis & promotor.', 'Anonymous listener stats to help artists & promoters.'),
+      };
+  String get consentsTitle => _('Persetujuan penggunaan data', 'Data use consents');
+  // Halaman Pengaturan (tata letak daftar)
+  String get sectionAccountSecurity => _('Akun & keamanan', 'Account & security');
+  String get sectionNotifPrivacy => _('Notifikasi & privasi', 'Notifications & privacy');
+  String twoStepShort(bool on) => on ? _('Kode authenticator diminta setiap masuk.', 'Asks for an authenticator code at sign-in.') : _('Lindungi akun dengan aplikasi authenticator.', 'Protect your account with an authenticator app.');
+  String get statusOn => _('Aktif', 'On');
+  String get statusOff => _('Nonaktif', 'Off');
+  String get notifRowHint => _('Pilih kanal Push, Email & WhatsApp per kategori.', 'Choose Push, Email & WhatsApp per category.');
+  String get notifChannels => _('Kanal per kategori', 'Channels per category');
+  String get privacyRowHint => _('Atur cara RAVE memakai datamu.', 'Choose how RAVE uses your data.');
+  String get logoutTitle => _('Keluar dari RAVE?', 'Sign out of RAVE?');
+  String get logoutBody => _('Pemutaran berhenti dan kamu perlu masuk lagi untuk mendengarkan lagu penuh.', 'Playback stops and you will need to sign in again to hear full songs.');
   String get privacyPolicy => _('Kebijakan Privasi', 'Privacy Policy');
   String get terms => _('Ketentuan Layanan', 'Terms of Service');
   String get deleteAccount => _('Hapus akun', 'Delete account');
@@ -449,6 +487,36 @@ class S {
         'system' => (name: _('Akun & sistem', 'Account & system'), desc: _('Keamanan akun, verifikasi, dan pengumuman penting.', 'Account security, verification, and important announcements.')),
         _ => (name: _('Sosial', 'Social'), desc: _('Aktivitas pengikut & playlist kolaborasi.', 'Follower activity & collaborative playlists.')),
       };
+  // Profil & verifikasi akun. Pengajuan verifikasi (data diri, NIK, OTP kontak) hanya di web — mobile menampilkan status.
+  String get verifiedLabel => _('Akun terverifikasi', 'Verified account');
+  String get verifiedStamp => 'Verified';
+  String get profileSection => _('Profil', 'Profile');
+  String get editProfile => _('Edit profil', 'Edit profile');
+  String get editProfileHint => _('Foto profil, nama tampilan & kota.', 'Profile photo, display name & city.');
+  String get verifyAccount => _('Verifikasi akun', 'Account verification');
+  /// Status verifikasi dari `verification_status` + `verified` (badge). `identity` = KYC disetujui, badge belum tampil.
+  String verifyStatus(String status, {required bool badge, required String since}) => switch (status) {
+        'VERIFIED' when badge => _('Terverifikasi sejak $since', 'Verified since $since'),
+        'VERIFIED' => _('Identitas terverifikasi — lengkapi data diri di web untuk menampilkan badge', 'Identity verified — complete your details on the web to show the badge'),
+        'PENDING' => _('Pengajuan sedang ditinjau', 'Your request is under review'),
+        'REJECTED' => _('Pengajuan belum disetujui', 'Your request wasn’t approved'),
+        _ => _('Verifikasi akun sekaligus memverifikasi identitasmu (KYC) — syarat menarik dana & membuat event bertiket.',
+            'Account verification also verifies your identity (KYC) — required to withdraw funds & create ticketed events.'),
+      };
+  String get applyVerified => _('Ajukan akun Verified', 'Apply for Verified');
+  String get manageVerification => _('Kelola verifikasi', 'Manage verification');
+  String get verifyOnWeb => _('Dibuka di RAVE web.', 'Opens on the RAVE web app.');
+  String get displayNameLabel => _('Nama tampilan', 'Display name');
+  String get cityLabel => _('Kota domisili', 'Home city');
+  String get avatarLabel => _('Foto profil', 'Profile photo');
+  String get avatarHint => _('JPG/PNG persegi, min. 300×300 px.', 'Square JPG/PNG, at least 300×300 px.');
+  String get uploadPhoto => _('Unggah foto', 'Upload photo');
+  String get uploading => _('Mengunggah…', 'Uploading…');
+  String get removeLabel => _('Hapus', 'Remove');
+  String get avatarUpdated => _('Foto profil diperbarui', 'Profile photo updated');
+  String get pickFailed => _('Galeri foto tidak bisa dibuka di perangkat ini.', 'Couldn’t open the photo picker on this device.');
+  String get saveData => _('Simpan', 'Save');
+  String get profileSaved => _('Profil disimpan', 'Profile saved');
   String get dangerNote => _('Tindakan di sini permanen.', 'Actions here are permanent.');
   String get signInForSetting => _('Masuk dulu buat ubah ini.', 'Sign in to change this.');
 }

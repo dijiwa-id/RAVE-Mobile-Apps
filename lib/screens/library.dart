@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../player/player.dart';
 import '../widgets/common.dart';
 import '../widgets/motion.dart';
+import '../widgets/verified_badge.dart';
 import '../widgets/feedback.dart';
 import 'login.dart';
 import '../widgets/playlist_actions.dart';
@@ -33,7 +34,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
             child: Row(children: [
-              Cover(app.api.user?.avatarUrl, size: 34, round: true),
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Stack(clipBehavior: Clip.none, children: [
+                  Cover(app.api.user?.avatarUrl, size: 34, round: true),
+                  if (app.api.user?.verified ?? false) const Positioned(right: -3, bottom: -3, child: VerifiedBadge(size: 15)),
+                ]),
+              ),
               const SizedBox(width: 12),
               Expanded(child: Text(s.yourLibrary.toUpperCase(), style: Rave.poster(34))),
               IconButton(tooltip: s.createPlaylist, onPressed: () => showCreateSheet(context), icon: const Icon(Icons.add_rounded, size: 28)),

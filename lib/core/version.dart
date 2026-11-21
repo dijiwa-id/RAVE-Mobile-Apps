@@ -1,4 +1,4 @@
 // DIBUAT OTOMATIS oleh tool/bump_version.dart — jangan ubah manual. Sumber: pubspec.yaml.
-const appVersion = '0.2.5';
-const appBuild = 8;
-const appVersionLabel = '0.2.5 (8)';
+const appVersion = '0.3.1';
+const appBuild = 10;
+const appVersionLabel = '0.3.1 (10)';

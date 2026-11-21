@@ -6,6 +6,47 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-21
+
+### Ditambahkan
+- **Masuk dengan Google tanpa keluar aplikasi**: tombol Google membuka lembar akun Google bawaan Android (Credential
+  Manager) di atas aplikasi — pilih akun yang sudah tersinkron di ponsel, satu ketukan langsung masuk (akun ber-2FA
+  lanjut ke langkah kode authenticator). Server memverifikasi ID token Google (`POST /v1/auth/oauth/google/native`).
+- Bila login native belum tersedia (klien OAuth Android belum didaftarkan / tanpa Layanan Google Play), aplikasi otomatis
+  memakai alur browser **di dalam aplikasi** (Custom Tab) — juga untuk Facebook/Apple — bukan membuka browser terpisah.
+  Paket baru `google_sign_in` 7.
+
+### Diubah
+- **Halaman Pengaturan dirapikan** — lebih bersih & profesional: kartu profil di atas (avatar, nama + badge Verified,
+  email, paket; ketuk = Edit profil), satu banner Premium ringkas untuk akun Gratis, lalu bagian bergaya daftar
+  (Akun & keamanan · Pemutaran · Tampilan · Notifikasi & privasi · Tentang) dengan baris seragam: ikon kecil, judul,
+  keterangan, status (Aktif/Nonaktif, tag Premium) dan kontrol/penunjuk (› sub-halaman, ↗ dibuka di web).
+  Detail panjang pindah ke sub-halaman: **Kualitas audio**, **Equalizer**, **Notifikasi** per kategori, **Privasi &
+  data** (kini dengan penjelasan tiap persetujuan) dan **Server**. Bahasa jadi sakelar ID/EN; **Keluar** (dengan
+  konfirmasi) di bawah, **Hapus akun** sebagai tautan merah berkonfirmasi. Pencarian tetap menjangkau isi sub-halaman.
+  Komponen baris/bagian yang sama ikut merapikan layar Edit profil. Uji tangkapan layar baru `test/settings_shots_test.dart`.
+
+## [0.3.0] - 2026-11-21
+
+### Ditambahkan
+- **Verifikasi 2 langkah (2FA) saat masuk**: akun ber-authenticator diminta kode 6 digit setelah OTP email atau login
+  sosial, dengan opsi **kode pemulihan** sekali pakai; kode salah, terkunci sementara, dan sesi verifikasi kedaluwarsa
+  (kembali ke langkah email) ditangani dengan pesan jelas. Tanpa ini akun ber-2FA tidak bisa masuk dari aplikasi.
+- **Verifikasi 2 langkah di Pengaturan → Akun**: status aktif/belum + tombol Aktifkan / Kelola di web
+  (`/app/settings#set-security`). Model `Me` membawa `totp_enabled`. Uji baru `test/mfa_test.dart`.
+- **Badge Verified** (`lib/widgets/verified_badge.dart`) — port 1:1 dari web: stiker bintang-sobek 12 sudut mustard
+  bergaris tinta + bayangan sablon, centang "V" RAVE, cincin putus-putus di ≥ 28 px; plus cap **VERIFIED**. Tampil di
+  samping nama akun yang `verified` (baris akun Pengaturan, sapaan Beranda, avatar kepala Koleksi).
+- **Status verifikasi akun di Pengaturan → Akun**: Terverifikasi sejak … (+ cap), Identitas terverifikasi tanpa badge
+  (KYC lama), Ditinjau, Belum disetujui, atau ajakan KYC. Tombol "Ajukan akun Verified" / "Kelola verifikasi" membuka
+  `/app/settings#set-verify` di browser — pengajuan (data diri, NIK, OTP email/WhatsApp) hanya di RAVE web. Profil
+  dimuat ulang saat aplikasi kembali aktif & saat Pengaturan dibuka, jadi status/badge langsung terbarui.
+- **Edit profil**: foto profil (pilih dari galeri lewat Photo Picker Android → unggah `purpose: avatar`, JPG/PNG
+  ≥ 300 px; hapus), nama tampilan, kota. Paket baru `image_picker`.
+- Model `Me` membawa `full_name`, `birth_date`, `gender`, `bio`, `socials`, `phone`, `id_number_masked`, `verified`,
+  `verified_at`, `verification_status` (profil tersimpan versi lama tetap terbaca). 27 uji baru
+  (`test/verification_test.dart`).
+
 ### Diubah
 - **Onboarding dirombak** — lebih bersih, profesional & responsif (320–480 dp, layar pendek, teks ×1,3): slide pertama
   memakai **cover album asli** dari katalog (`/v1/catalog/home`, cadangan kotak bermerek saat offline) berkipas di
