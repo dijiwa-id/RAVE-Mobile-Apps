@@ -131,19 +131,22 @@ class _VinylCoverState extends State<VinylCover> with SingleTickerProviderStateM
             child: DecoratedBox(
               decoration: const BoxDecoration(shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x8C000000), blurRadius: 30, offset: Offset(0, 10))]),
               child: Stack(fit: StackFit.expand, children: [
-                const CustomPaint(painter: _GroovePainter()),
+                const VintageDisc(),
                 Padding(
                   padding: EdgeInsets.all(disc * 0.33),
                   child: _Spin(
                     turns: _turns,
                     child: Container(
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: widget.labelColor, boxShadow: [BoxShadow(color: widget.labelColor, spreadRadius: 3)]),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.labelColor,
+                        boxShadow: const [BoxShadow(color: Color(0xFF0B0908), spreadRadius: 1.5)],
+                      ),
                       child: ClipOval(
                         child: Stack(fit: StackFit.expand, children: [
                           if (widget.image != null) Cover(widget.image, size: disc * 0.34),
-                          Center(
-                            child: Container(width: disc * 0.034, height: disc * 0.034, decoration: const BoxDecoration(color: Rave.shadow, shape: BoxShape.circle)),
-                          ),
+                          const AgedLabelOverlay(opacity: 0.6),
+                          Center(child: SpindleHole(size: disc * 0.034)),
                         ]),
                       ),
                     ),
@@ -160,25 +163,63 @@ class _VinylCoverState extends State<VinylCover> with SingleTickerProviderStateM
   }
 }
 
-/// Alur piringan: lingkaran konsentris gelap-terang + kilap sudut.
-class _GroovePainter extends CustomPainter {
-  const _GroovePainter();
+/// Tekstur vintage hyperrealistic (sama dengan web/desktop; dibuat `Development/scripts/vinyl-textures.ts`).
+const vinylDiscTexture = 'assets/textures/vinyl-disc.webp';
+const vinylLabelTexture = 'assets/textures/vinyl-label.webp';
+
+/// Piringan vintage: tekstur alur + debu + baret + patina, kilau lampu hangat diam di atasnya.
+class VintageDisc extends StatelessWidget {
+  const VintageDisc({super.key});
+  @override
+  Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
+        const DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle, color: Color(0xFF100D0B))),
+        Image.asset(vinylDiscTexture, fit: BoxFit.cover, filterQuality: FilterQuality.medium, gaplessPlayback: true),
+        const CustomPaint(painter: _SheenPainter()),
+      ]);
+}
+
+/// Lapisan usia label (kertas menguning, foxing, bekas spindle) di atas warna/cover label. Flutter tidak punya
+/// blend `multiply` antar-widget → tekstur diubah jadi bayangan cokelat ber-alfa sesuai gelapnya (setara multiply).
+class AgedLabelOverlay extends StatelessWidget {
+  const AgedLabelOverlay({super.key, this.opacity = 0.75});
+  final double opacity;
+  static const _toStain = ColorFilter.matrix([
+    0, 0, 0, 0, 92, //
+    0, 0, 0, 0, 58, //
+    0, 0, 0, 0, 28, //
+    -0.45, -0.45, -0.4, 1.4, 0,
+  ]);
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Opacity(
+          opacity: opacity,
+          child: ColorFiltered(colorFilter: _toStain, child: Image.asset(vinylLabelTexture, fit: BoxFit.cover, gaplessPlayback: true)),
+        ),
+      );
+}
+
+/// Lubang spindle dengan cincin aus.
+class SpindleHole extends StatelessWidget {
+  const SpindleHole({super.key, required this.size});
+  final double size;
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [Color(0xFF050403), Color(0xFF050403), Color(0xFF2A2520), Color(0x59281E14)], stops: [0, 0.45, 0.62, 1]),
+        ),
+      );
+}
+
+/// Kilau anisotropik hangat (tungsten) + bevel tepi — tidak ikut berputar.
+class _SheenPainter extends CustomPainter {
+  const _SheenPainter();
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
     final r = size.shortestSide / 2;
-    canvas.drawCircle(c, r, Paint()..color = const Color(0xFF111111));
-    final groove = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = const Color(0xFF1A181C);
-    for (var rr = r * 0.36; rr < r - 2; rr += 3) {
-      canvas.drawCircle(c, rr, groove);
-    }
-    canvas.drawCircle(c, r * 0.175, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = const Color(0x0DFFFFFF));
     canvas.drawCircle(
       c,
       r,
@@ -186,18 +227,18 @@ class _GroovePainter extends CustomPainter {
         ..shader = SweepGradient(
           startAngle: 0.7,
           endAngle: 0.7 + 2 * pi,
-          colors: const [Colors.transparent, Color(0x1AFFFFFF), Colors.transparent, Colors.transparent, Color(0x14FFFFFF), Colors.transparent],
+          colors: const [Colors.transparent, Color(0x24FFE8C8), Colors.transparent, Colors.transparent, Color(0x1AFFE8C8), Colors.transparent],
           stops: const [0.12, 0.18, 0.26, 0.62, 0.68, 0.76],
         ).createShader(Rect.fromCircle(center: c, radius: r)),
     );
-    canvas.drawCircle(c, r - 1, Paint()
+    canvas.drawCircle(c, r - 0.5, Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = const Color(0xFF050505));
+      ..strokeWidth = 1
+      ..color = const Color(0xFF050403));
   }
 
   @override
-  bool shouldRepaint(_GroovePainter old) => false;
+  bool shouldRepaint(_SheenPainter old) => false;
 }
 
 /// Putar anak sesuai [turns] (hanya transform; anak di-cache).

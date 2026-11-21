@@ -13,6 +13,7 @@ import '../widgets/cassette.dart';
 import '../widgets/common.dart';
 import '../widgets/feedback.dart';
 import '../widgets/connection.dart';
+import '../widgets/vinyl.dart';
 import 'login.dart';
 import 'shell.dart';
 
@@ -975,48 +976,33 @@ class _Ghost extends StatelessWidget {
 
 // ================================================================ ILUSTRASI
 
-/// Piringan hitam (alur, label tengah, kilap) — digambar, tanpa aset.
+/// Piringan hitam vintage (tekstur hyperrealistic bersama, label kertas tua dengan warna [label]).
 class Vinyl extends StatelessWidget {
   const Vinyl({super.key, required this.size, this.label = Rave.mustard});
   final double size;
   final Color label;
   @override
-  Widget build(BuildContext context) => CustomPaint(size: Size.square(size), painter: _VinylPainter(label));
-}
-
-class _VinylPainter extends CustomPainter {
-  _VinylPainter(this.label);
-  final Color label;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2;
-    canvas.drawCircle(c, r, Paint()..color = const Color(0xFF121113));
-    final groove = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = Colors.white.withValues(alpha: 0.05);
-    for (var k = r * 0.38; k < r * 0.97; k += r * 0.025) {
-      canvas.drawCircle(c, k, groove);
-    }
-    // Kilap diagonal.
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = SweepGradient(
-          colors: [Colors.transparent, Colors.white.withValues(alpha: 0.10), Colors.transparent, Colors.transparent, Colors.white.withValues(alpha: 0.07), Colors.transparent],
-          stops: const [0, 0.08, 0.18, 0.5, 0.58, 0.68],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    canvas.drawCircle(c, r * 0.34, Paint()..color = label);
-    final tp = TextPainter(text: TextSpan(text: 'RAVE', style: Rave.poster(r * 0.16, color: Rave.ink)), textDirection: TextDirection.ltr)..layout();
-    tp.paint(canvas, c - Offset(tp.width / 2, r * 0.2));
-    canvas.drawCircle(c, r * 0.035, Paint()..color = Rave.canvas);
-  }
-
-  @override
-  bool shouldRepaint(_VinylPainter old) => old.label != label;
+  Widget build(BuildContext context) => SizedBox.square(
+        dimension: size,
+        child: Stack(alignment: Alignment.center, children: [
+          const Positioned.fill(child: VintageDisc()),
+          Container(
+            width: size * 0.34,
+            height: size * 0.34,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: label, boxShadow: const [BoxShadow(color: Color(0xFF0B0908), spreadRadius: 1)]),
+            child: ClipOval(
+              child: Stack(alignment: Alignment.center, children: [
+                const Positioned.fill(child: AgedLabelOverlay()),
+                Transform.translate(
+                  offset: Offset(0, -size * 0.05),
+                  child: Text('RAVE', style: Rave.poster(size * 0.08, color: Rave.ink.withValues(alpha: 0.85))),
+                ),
+                SpindleHole(size: size * 0.035),
+              ]),
+            ),
+          ),
+        ]),
+      );
 }
 
 /// Langkah terakhir: tiket gig + stiker LIVE (dukung artis: live, tiket, ikuti). Komposisi tetap 300 × 220 yang
