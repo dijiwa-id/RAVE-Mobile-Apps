@@ -64,3 +64,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider untuk kartu cerita Instagram (versi sama dengan share_plus).
+    implementation("androidx.core:core-ktx:1.16.0")
+}

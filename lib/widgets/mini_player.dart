@@ -9,6 +9,7 @@ import 'deck.dart';
 import 'links.dart';
 import 'media.dart';
 import 'motion.dart';
+import 'share_sheet.dart';
 
 /// Mini-player di atas tab bar: sampul, judul, suka, putar/jeda, progres tipis. Ketuk → pemutar layar penuh,
 /// geser ke atas juga membuka. Selama jeda iklan menampilkan kartu iklan.
@@ -36,6 +37,8 @@ class MiniPlayer extends StatelessWidget {
         if (c == null) return const SizedBox.shrink();
         return GestureDetector(
           onTap: () => openNowPlaying(context),
+          // Tahan lama → lembar bagikan lagu (bilah mini terlalu sempit untuk tombol ke-3; sama dengan baris lagu).
+          onLongPress: c.kind == 'track' && shareEnabled(app) ? () => showShareSheet(context, trackId: c.id, title: c.title, artist: c.subtitle, cover: c.imageUrl) : null,
           onVerticalDragEnd: (d) => (d.primaryVelocity ?? 0) < -200 ? openNowPlaying(context) : null,
           child: Container(
             margin: const EdgeInsets.fromLTRB(MiniPlayer.margin, 0, MiniPlayer.margin, 4),

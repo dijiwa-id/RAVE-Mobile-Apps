@@ -6,6 +6,21 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+### Ditambahkan
+- **Bagikan lagu ke Instagram Story, X, dan Facebook**: ikon bagikan (`Icons.share`) di Now Playing, menu aksi setiap
+  lagu (album, playlist, artis, cari, jelajahi, koleksi), tahan-lama di antrean & mini player. Instagram: kartu cerita
+  1080×1920 langsung ke Story (tautan disalin untuk stiker); X/Facebook membuka aplikasinya; "Salin tautan" & share sheet.
+- **Pemutaran latar stabil**: playlist lanjut ke lagu berikutnya dan musik tidak mati saat layar mati / pindah aplikasi.
+- **Header koleksi** (playlist editorial, album, podcast) tidak bertumpuk saat digulir; **vinyl vintage** di Now Playing & intro.
+
+### Catatan deploy
+- Butuh backend Rave-App dengan endpoint bagikan (`/v1/catalog/tracks/:id/share`, catalog migrasi `019_track_shares`) —
+  `rave.danantrex.my.id` masih v0.3.1, jadi sampai di-deploy lembar bagikan menampilkan "Bagikan belum tersedia".
+  Lihat `docs/DEPLOY-NEXT.md` di repo Rave-App.
+- Opsional: build dengan `--dart-define=RAVE_FB_APP_ID=<Facebook App ID>` agar Instagram memakai intent resmi
+  `ADD_TO_STORY` (tautan ikut sebagai stiker otomatis). Tanpa ID: gambar dikirim ke Story, tautan ditempel manual.
+- Belum diuji manual di perangkat untuk alur bagikan (hanya tes widget 265/265); uji lewat server dev sebelum rilis.
+
 ## [0.3.1] - 2026-11-21
 
 ### Ditambahkan

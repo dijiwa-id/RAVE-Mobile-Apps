@@ -274,6 +274,24 @@ class S {
   String get seekPremium => _('Geser lagu khusus Premium', 'Seeking is a Premium feature');
   String get share => _('Bagikan', 'Share');
   String get linkCopied => _('Tautan disalin', 'Link copied');
+  // Bagikan lagu (sama dengan web & desktop: common.share)
+  String get shareTrack => _('Bagikan lagu', 'Share track');
+  String shareTrackFor(String title) => _('Bagikan $title', 'Share $title');
+  String get shareInstagram => 'Instagram Story';
+  String get shareX => 'X';
+  String get shareFacebook => 'Facebook';
+  String get shareCopy => _('Salin tautan', 'Copy link');
+  String get shareSystem => _('Lainnya…', 'More…');
+  String get shareLoading => _('Menyiapkan…', 'Preparing…');
+  String get shareUnavailable => _('Bagikan belum tersedia', 'Sharing is not available yet');
+  String get shareUnavailableBody => _('Lagu ini belum bisa dibagikan dari sini. Coba lagi nanti ya.', 'This track can’t be shared from here yet. Try again later.');
+  String get shareOffline => _('Belum tersambung ke RAVE — cek koneksi lalu coba lagi.', 'Can’t reach RAVE — check your connection and try again.');
+  String get shareRetry => _('Coba lagi', 'Try again');
+  String get shareMaking => _('Membuat kartu cerita…', 'Making the story card…');
+  String get shareIgPaste => _('Tautan disalin — tempel tautan sebagai stiker di Story.', 'Link copied — paste the link as a sticker in your Story.');
+  String get shareIgFailed => _('Kartu cerita gagal dibuat — tautan tetap disalin.', 'Couldn’t create the story card — the link was still copied.');
+  String get shareOpenFailed => _('Tidak bisa membuka aplikasi — tautan disalin.', 'Couldn’t open the app — link copied instead.');
+  String get shareNowPlaying => _('Sedang diputar di', 'Now playing on');
   String get noQueue => _('Antrean masih kosong. Putar sesuatu, nanti lagu berikutnya muncul di sini.', 'Your queue is empty. Play something and what’s next shows up here.');
   String get noLyrics => _('Liriknya belum ada. Nikmati musiknya dulu ya.', 'No lyrics for this one yet — just enjoy the music.');
   String get playingFrom => _('MEMUTAR DARI', 'PLAYING FROM');

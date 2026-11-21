@@ -10,6 +10,7 @@ import '../screens/routes.dart';
 import 'common.dart';
 import 'feedback.dart';
 import 'motion.dart';
+import 'share_sheet.dart';
 import 'playlist_actions.dart';
 
 /// Lebar kartu rak: ≈2,2 kartu terlihat di ponsel (3,3 tablet, 5 layar lebar) — sama dengan rak web.
@@ -392,7 +393,7 @@ class TrackTile extends StatelessWidget {
   }
 }
 
-/// Lembar aksi lagu: suka, tambah antrean, ke artis, ke album.
+/// Lembar aksi lagu: suka, tambah antrean, ke artis, ke album, bagikan.
 void showTrackMenu(BuildContext context, Track t) {
   final app = App.read(context);
   final s = app.s;
@@ -425,6 +426,7 @@ void showTrackMenu(BuildContext context, Track t) {
           }),
           item(Icons.person_rounded, s.goArtist, () => openItem(context, 'artist', t.artist.slug)),
           if (t.releaseId.isNotEmpty) item(Icons.album_rounded, s.goAlbum, () => openItem(context, 'release', t.releaseId)),
+          if (shareEnabled(app)) item(shareIcon, s.share, () => showShareSheet(context, trackId: t.id, title: t.title, artist: t.artist.name, cover: t.coverUrl)),
           const SizedBox(height: 8),
         ]),
       );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../widgets/media.dart';
 import '../widgets/motion.dart';
 import '../widgets/vinyl.dart';
 import '../widgets/deck.dart';
+import '../widgets/share_sheet.dart';
 import 'shell.dart';
 
 void openNowPlaying(BuildContext context) {
@@ -52,6 +54,7 @@ class NowPlayingScreen extends StatelessWidget {
         final c = p.current;
         if (c == null) return const Scaffold();
         final liked = app.likes.has(c.id);
+        final canShare = shareEnabled(app);
         final imageUrl = app.api.media(c.imageUrl);
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -114,7 +117,7 @@ class NowPlayingScreen extends StatelessWidget {
                         ),
                       ),
                       Padding(
-                        padding: edge(r: app.api.authed && c.kind == 'track' ? _inset(28) : 0),
+                        padding: edge(r: app.api.authed && c.kind == 'track' ? _inset(28) : canShare ? _inset(24) : 0),
                         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -131,6 +134,14 @@ class NowPlayingScreen extends StatelessWidget {
                               ),
                             ]),
                           ),
+                          // Bagikan di samping suka (ikon sama dengan web/desktop: Share2 ↔ Icons.share).
+                          if (canShare)
+                            IconButton(
+                              key: const Key('np-share'),
+                              tooltip: s.share,
+                              onPressed: () => _share(context, c),
+                              icon: const Icon(shareIcon, size: 24),
+                            ),
                           if (app.api.authed && c.kind == 'track')
                             IconButton(
                               tooltip: liked ? s.unlike : s.like,
@@ -202,13 +213,11 @@ class NowPlayingScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Padding(
-                        padding: edge(r: _inset(22)),
+                        padding: edge(),
                         child: Row(children: [
                           Flexible(child: _Chip(icon: Icons.queue_music_rounded, label: s.queue, onTap: () => _sheet(context, const _QueueSheet()))),
                           const SizedBox(width: 10),
                           if (c.kind == 'track') Flexible(child: _Chip(icon: Icons.lyrics_outlined, label: s.lyrics, onTap: () => _sheet(context, const _LyricsSheet()))),
-                          const Spacer(),
-                          IconButton(tooltip: s.share, onPressed: () => _share(context, c), icon: const Icon(Icons.ios_share_rounded, size: 22)),
                         ]),
                       ),
                       const SizedBox(height: 8),
@@ -230,8 +239,12 @@ class NowPlayingScreen extends StatelessWidget {
   /// Sisipan visual ikon berukuran [icon] di dalam IconButton 48 dp (jarak muka ikon ke tepi area sentuh).
   static double _inset(double icon) => (Rave.tap - icon) / 2;
 
-  /// Bagikan: salin tautan web lagu ke papan klip (tanpa paket share tambahan).
+  /// Bagikan: lagu → lembar bagikan (Instagram/X/Facebook/salin/lainnya); episode → salin tautan web.
   void _share(BuildContext context, Playable c) {
+    if (c.kind == 'track') {
+      unawaited(showShareSheet(context, trackId: c.id, title: c.title, artist: c.subtitle, cover: c.imageUrl));
+      return;
+    }
     final app = App.read(context);
     final url = '${app.settings.server}/app/${c.kind == 'track' ? (c.releaseId != null ? 'album/${c.releaseId}' : 'track/${c.id}') : 'episode/${c.id}'}';
     Clipboard.setData(ClipboardData(text: '${c.title} — ${c.subtitle}\n$url'));
@@ -360,6 +373,9 @@ class _QueueSheet extends StatelessWidget {
           for (var i = 0; i < upcoming.length; i++)
             ListTile(
               onTap: () => p.jump(p.index + 1 + i),
+              onLongPress: upcoming[i].kind == 'track' && shareEnabled(app)
+                  ? () => showShareSheet(context, trackId: upcoming[i].id, title: upcoming[i].title, artist: upcoming[i].subtitle, cover: upcoming[i].imageUrl)
+                  : null,
               leading: Cover(upcoming[i].imageUrl, size: 44),
               title: Text(upcoming[i].title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Rave.body(weight: FontWeight.w600)),
               subtitle: Text(upcoming[i].subtitle, style: Rave.body(size: 13, color: Rave.muted)),
