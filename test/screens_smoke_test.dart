@@ -312,6 +312,49 @@ void _suite() {
       expect(find.text('ALBUM UJI'), findsOneWidget);
     });
 
+    testWidgets('halaman koleksi (${w.round()} dp): header tidak saling tumpuk saat digulir', (t) async {
+      final app = await _state();
+      final tracks = [
+        for (var i = 0; i < 20; i++)
+          Track.fromJson({
+            'id': 't$i',
+            'title': 'Lagu $i',
+            'duration_ms': 200000,
+            'artist': {'id': 'a1', 'name': 'Senja', 'slug': 'senja'},
+          }),
+      ];
+      await _pump(
+        t,
+        app,
+        CollectionPage(kind: 'Playlist', title: 'Pilihan Editorial', meta: const Text('RAVE · 20 lagu'), actions: const [], slivers: [TrackSliver(tracks: tracks, contextKey: 'playlist:p1')]),
+        width: w,
+      );
+      await t.pumpAndSettle();
+      final pos = t.state<ScrollableState>(find.byType(Scrollable).first).position;
+      // Bug lama: sampul (paralaks) turun menimpa label/judul, dan judul turun menimpa meta.
+      for (var o = 0.0; o <= 360; o += 30) {
+        pos.jumpTo(o);
+        await t.pump();
+        final cover = t.getRect(find.byType(Cover).first);
+        final eyebrow = t.getRect(find.text('PLAYLIST'));
+        final title = t.getRect(find.text('PILIHAN EDITORIAL'));
+        final meta = t.getRect(find.text('RAVE · 20 lagu'));
+        expect(cover.bottom, lessThanOrEqualTo(eyebrow.top), reason: 'sampul menimpa label @ $o');
+        expect(eyebrow.bottom, lessThanOrEqualTo(title.top), reason: 'label menimpa judul @ $o');
+        expect(title.bottom, lessThanOrEqualTo(meta.top), reason: 'judul menimpa meta @ $o');
+      }
+      // Header habis tergulir → judul kecil app bar tampil penuh.
+      pos.jumpTo(500);
+      await t.pump();
+      final small = find.descendant(of: find.byType(AppBar), matching: find.text('Pilihan Editorial'));
+      expect(small, findsOneWidget);
+      final op = t.widget<Opacity>(find.ancestor(of: small, matching: find.byType(Opacity)).first);
+      expect(op.opacity, 1.0);
+      // Tuntaskan jeda & animasi masuk (Entrance) baris lagu yang sempat dibangun saat digulir.
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+    });
+
     testWidgets('rak dengan tepi memudar & snap (${w.round()} dp)', (t) async {
       final app = await _state();
       await _pump(

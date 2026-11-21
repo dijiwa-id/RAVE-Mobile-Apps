@@ -65,41 +65,22 @@ class _ArtistScreenState extends State<ArtistScreen> {
       builder: (context, a, _) {
         _loadFollow(a);
         final top = more ? a.topTracks : a.topTracks.take(5).toList();
+        // Offset gulir saat header habis tersisa setinggi app bar.
+        final headerEnd = _Header.heightFor(context) - kToolbarHeight - MediaQuery.paddingOf(context).top;
         return Scaffold(
           extendBodyBehindAppBar: true,
           // App bar & judul muncul BERTAHAP mengikuti gulir (bukan berganti mendadak di satu titik).
-          appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(kToolbarHeight),
-            child: AnimatedBuilder(
-              animation: _scroll,
-              builder: (context, _) {
-                final top = MediaQuery.paddingOf(context).top;
-                final o = _scroll.hasClients && _scroll.positions.length == 1 ? _scroll.offset : 0.0;
-                // Bilah terisi saat sisa header ≈ setinggi app bar; judul menyusul sedikit kemudian.
-                final end = _Header.heightFor(context) - kToolbarHeight - top;
-                final bg = Curves.easeOut.transform(((o - (end - 110)) / 110).clamp(0.0, 1.0));
-                final title = Curves.easeOut.transform(((o - (end - 40)) / 60).clamp(0.0, 1.0));
-                return AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  scrolledUnderElevation: 0,
-                  flexibleSpace: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Rave.plum.withValues(alpha: 0.97 * bg),
-                      border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06 * bg))),
-                    ),
-                    child: const SizedBox.expand(),
-                  ),
-                  // Header poster gig selalu gelap (kedua tema) → ikon & bilah status terang.
-                  foregroundColor: Rave.paper,
-                  systemOverlayStyle: Rave.overlayFor(Brightness.dark),
-                  title: Opacity(
-                    opacity: title,
-                    child: Transform.translate(offset: Offset(0, 8 * (1 - title)), child: Text(a.name, style: Rave.body(size: 16, weight: FontWeight.w700, color: Rave.paper))),
-                  ),
-                );
-              },
-            ),
+          appBar: CollapsingAppBar(
+            controller: _scroll,
+            title: a.name,
+            color: Rave.plum.withValues(alpha: 0.97),
+            // Bilah terisi saat sisa header ≈ setinggi app bar; judul menyusul sedikit kemudian.
+            background: (headerEnd - 110, headerEnd),
+            titleRange: (headerEnd - 40, headerEnd + 20),
+            titleStyle: Rave.body(size: 16, weight: FontWeight.w700, color: Rave.paper),
+            // Header poster gig selalu gelap (kedua tema) → ikon & bilah status terang.
+            foregroundColor: Rave.paper,
+            systemOverlayStyle: Rave.overlayFor(Brightness.dark),
           ),
           body: CustomScrollView(controller: _scroll, physics: raveVerticalPhysics, slivers: [
             SliverToBoxAdapter(child: DarkZone(child: _Header(a: a, scroll: _scroll))),
@@ -181,7 +162,7 @@ class _Header extends StatelessWidget {
       height: h,
       child: AnimatedBuilder(
         animation: sc,
-        builder: (context, _) => _layers(context, sc.hasClients && sc.positions.length == 1 ? sc.offset : 0.0, h),
+        builder: (context, _) => _layers(context, scrollOffsetOf(sc), h),
       ),
     );
   }

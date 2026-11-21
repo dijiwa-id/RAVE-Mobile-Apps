@@ -473,38 +473,67 @@ class RavePageTransitionsBuilder extends PageTransitionsBuilder {
   Duration get transitionDuration => const Duration(milliseconds: 260);
 }
 
-// ───────────────────────── Paralaks header ─────────────────────────
+// ───────────────────────── Header yang melipat saat digulir ─────────────────────────
 
-/// Paralaks terhadap posisi gulir [controller]: bergeser ([drift] × offset) lebih lambat dari isi, mengecil hingga
-/// [shrink], opsional memudar; saat ditarik melewati atas (pantul) membesar sedikit. Hanya transform/opacity anak yang
-/// di-cache (tanpa membangun ulang). Kurangi gerakan → statis.
-class Parallax extends StatelessWidget {
-  const Parallax({super.key, required this.controller, required this.child, this.drift = 0.4, this.shrink = 0.1, this.fade = false, this.alignment = Alignment.center, this.range = 320});
+/// Offset gulir [controller] yang aman dibaca di builder (0 bila belum/lebih dari satu posisi terpasang).
+double scrollOffsetOf(ScrollController controller) => controller.hasClients && controller.positions.length == 1 ? controller.offset : 0.0;
+
+/// Kemajuan 0→1 dari [o] di rentang [begin, end] dengan kurva easeOut (rumus bersama header Artis & koleksi).
+double scrollProgress(double o, double begin, double end) => Curves.easeOut.transform(((o - begin) / (end - begin)).clamp(0.0, 1.0));
+
+/// App bar transparan di atas header yang latarnya & judulnya muncul BERTAHAP mengikuti gulir (bukan berganti
+/// mendadak di satu titik): latar terisi di rentang [background], judul kecil menyusul di rentang [titleRange]
+/// sambil naik 8 dp. Dipakai halaman Artis dan halaman koleksi (album/playlist/podcast) agar interaksinya sama.
+class CollapsingAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const CollapsingAppBar({
+    super.key,
+    required this.controller,
+    required this.title,
+    required this.color,
+    required this.background,
+    required this.titleRange,
+    this.titleStyle,
+    this.foregroundColor,
+    this.systemOverlayStyle,
+  });
   final ScrollController controller;
-  final Widget child;
-  final double drift, shrink, range;
-  final bool fade;
-  final Alignment alignment;
+  final String title;
+  final Color color;
+  final (double, double) background, titleRange;
+  final TextStyle? titleStyle;
+  final Color? foregroundColor;
+  final SystemUiOverlayStyle? systemOverlayStyle;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
   Widget build(BuildContext context) {
-    if (RaveMotion.reduced(context)) return child;
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: controller,
-        child: child,
-        builder: (context, child) {
-          final o = controller.positions.length == 1 ? controller.offset : 0.0;
-          final t = (o / range).clamp(0.0, 1.0);
-          final double scale = o < 0 ? 1 + min(-o / 600, 0.12) : 1 - shrink * t;
-          Widget w = Transform.translate(
-            offset: Offset(0, o > 0 ? o * drift : 0),
-            child: Transform.scale(scale: scale, alignment: alignment, child: child),
-          );
-          if (fade) w = Opacity(opacity: (1 - t * 0.9).clamp(0.0, 1.0), child: w);
-          return w;
-        },
-      ),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final o = scrollOffsetOf(controller);
+        final bg = scrollProgress(o, background.$1, background.$2);
+        final t = scrollProgress(o, titleRange.$1, titleRange.$2);
+        return AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          foregroundColor: foregroundColor,
+          systemOverlayStyle: systemOverlayStyle,
+          flexibleSpace: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: color.a * bg),
+              border: Border(bottom: BorderSide(color: (foregroundColor ?? Colors.white).withValues(alpha: 0.06 * bg))),
+            ),
+            child: const SizedBox.expand(),
+          ),
+          title: Opacity(
+            opacity: t,
+            child: Transform.translate(offset: Offset(0, 8 * (1 - t)), child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle)),
+          ),
+        );
+      },
     );
   }
 }
