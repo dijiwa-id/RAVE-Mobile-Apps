@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 /// Hasil lembar akun Google native (Credential Manager Android): pengguna memilih akun yang sudah tersinkron di ponsel
@@ -29,9 +30,14 @@ class GoogleNative {
   static Future<GoogleNativeResult> Function(String serverClientId)? override;
   static String? _initializedFor;
 
+  /// Client ID yang terbukti gagal di perangkat ini (mis. SHA-1 belum terdaftar) — ketukan berikutnya di sesi ini
+  /// langsung ke alur browser tanpa menunggu lembar akun gagal lagi.
+  static String? _unavailableFor;
+
   static Future<GoogleNativeResult> signIn(String serverClientId) async {
     final o = override;
     if (o != null) return o(serverClientId);
+    if (_unavailableFor == serverClientId) return const GoogleNativeUnavailable('gagal sebelumnya di sesi ini');
     final g = GoogleSignIn.instance;
     try {
       if (_initializedFor != serverClientId) {
@@ -44,14 +50,27 @@ class GoogleNative {
       if (token == null || token.isEmpty) return const GoogleNativeUnavailable('ID token kosong');
       return GoogleNativeToken(token);
     } on GoogleSignInException catch (e) {
-      return switch (e.code) {
-        GoogleSignInExceptionCode.canceled => const GoogleNativeCanceled(),
-        _ => GoogleNativeUnavailable('${e.code.name}: ${e.description ?? ''}'),
-      };
+      final r = classifyGoogleError(e.code, e.description);
+      if (r is GoogleNativeUnavailable) _unavailableFor = serverClientId;
+      return r;
     } catch (e) {
+      _unavailableFor = serverClientId;
       return GoogleNativeUnavailable(e.toString());
     }
   }
+
+  /// Petakan galat `google_sign_in` → hasil. Credential Manager melaporkan salah konfigurasi (klien OAuth Android /
+  /// SHA-1 sertifikat belum didaftarkan di Google Cloud) sebagai *pembatalan* — `[16] Account reauth failed` — sehingga
+  /// tanpa pemetaan ini tombol Google diam saja. Hanya pembatalan sungguhan oleh pengguna yang dianggap batal.
+  @visibleForTesting
+  static GoogleNativeResult classifyGoogleError(GoogleSignInExceptionCode code, String? description) {
+    final d = (description ?? '').toLowerCase();
+    if (code == GoogleSignInExceptionCode.canceled && !_looksMisconfigured(d)) return const GoogleNativeCanceled();
+    return GoogleNativeUnavailable('${code.name}: ${description ?? ''}');
+  }
+
+  static bool _looksMisconfigured(String d) =>
+      d.contains('[16]') || d.contains('[10]') || d.contains('reauth') || d.contains('developer_error') || d.contains('developer console');
 
   /// Keluar dari RAVE → lupakan pilihan akun agar login berikutnya menampilkan pemilih akun lagi.
   static Future<void> signOut() async {

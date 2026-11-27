@@ -6,6 +6,15 @@ tag git `mobile-vX.Y.Z`. Kompatibel dengan API gateway RAVE `/v1`.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-27
+
+### Diperbaiki
+- **Masuk dengan Google tidak lagi diam saja**: bila lembar akun Google native gagal karena konfigurasi (klien OAuth
+  Android / SHA-1 sertifikat belum terdaftar di Google Cloud — Credential Manager melaporkannya sebagai "batal",
+  `[16] Account reauth failed`), aplikasi kini otomatis beralih ke alur masuk Google lewat tab browser di dalam
+  aplikasi, dan ketukan berikutnya di sesi yang sama langsung memakai alur itu. Pembatalan sungguhan oleh pengguna
+  tetap diam. Uji baru di `test/social_login_test.dart`.
+
 ### Ditambahkan
 - **Bagikan lagu ke Instagram Story, X, dan Facebook**: ikon bagikan (`Icons.share`) di Now Playing, menu aksi setiap
   lagu (album, playlist, artis, cari, jelajahi, koleksi), tahan-lama di antrean & mini player. Instagram: kartu cerita

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:rave_mobile/core/google_native.dart';
 import 'package:rave_mobile/core/social_login.dart';
 
 const launch = SocialLaunch(provider: 'dev', startPath: '/v1/auth/oauth/dev/start?app=x', pollToken: 'poll-token-xyz', userCode: 'ABCD-2345', expiresIn: 600, interval: 2);
@@ -74,6 +76,18 @@ void main() {
       expect(polls, 0);
       f.dispose();
       g.dispose();
+    });
+  });
+
+  group('Google native: klasifikasi galat', () {
+    test('batal oleh pengguna → Canceled (tanpa fallback)', () {
+      expect(GoogleNative.classifyGoogleError(GoogleSignInExceptionCode.canceled, 'activity is cancelled by the user.'), isA<GoogleNativeCanceled>());
+      expect(GoogleNative.classifyGoogleError(GoogleSignInExceptionCode.canceled, null), isA<GoogleNativeCanceled>());
+    });
+    test('SHA-1/klien Android belum terdaftar ("[16] Account reauth failed") → Unavailable → alur browser', () {
+      expect(GoogleNative.classifyGoogleError(GoogleSignInExceptionCode.canceled, '[16] Account reauth failed.'), isA<GoogleNativeUnavailable>());
+      expect(GoogleNative.classifyGoogleError(GoogleSignInExceptionCode.providerConfigurationError, 'x'), isA<GoogleNativeUnavailable>());
+      expect(GoogleNative.classifyGoogleError(GoogleSignInExceptionCode.unknownError, 'No credential available'), isA<GoogleNativeUnavailable>());
     });
   });
 }
